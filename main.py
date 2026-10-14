@@ -4,12 +4,12 @@ import uuid
 import json
 import asyncio
 import time
-import threading
+
 from datetime import datetime
 from collections import defaultdict
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Query, Form
-from fastapi.responses import FileResponse, StreamingResponse, PlainTextResponse
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+from fastapi.responses import FileResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -17,29 +17,50 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from langchain_core.messages import HumanMessage
+from langchain_openai import ChatOpenAI
 
 from src.graph.workflow import compile_graph
 from src.graph.streaming import run_agent_stream
-from src.rag.index_builder import build_index
-from src.rag.retriever_engine import knowledge_is_ready
+
+# v1.2: RAG 模块延迟导入（chromadb import 慢，避免阻塞 FastAPI 启动）
+_rag_imports = {}
+
+
+def _lazy_import(name: str):
+    """延迟导入 RAG 模块，首次调用时才触发 chromadb import"""
+    if name not in _rag_imports:
+        if name == "knowledge_is_ready":
+            from src.rag.retriever_engine import knowledge_is_ready as _fn
+            _rag_imports[name] = _fn
+        elif name == "build_index":
+            from src.rag.index_builder import build_index as _fn
+            _rag_imports[name] = _fn
+        elif name == "add_to_index":
+            from src.rag.index_builder import add_to_index as _fn
+            _rag_imports[name] = _fn
+        elif name == "remove_from_index":
+            from src.rag.index_builder import remove_from_index as _fn
+            _rag_imports[name] = _fn
+        elif name == "load_document":
+            from src.rag.document_loader import load_document as _fn
+            _rag_imports[name] = _fn
+    return _rag_imports[name]
 from src.memory.checkpoint_store import session_store
 from src.config import (
     DEEPSEEK_API_KEY,
+    DEEPSEEK_BASE_URL,
+    MODEL_NAME,
     FEISHU_APP_ID,
     FEISHU_APP_SECRET,
-    FEISHU_VERIFICATION_TOKEN,
-    FEISHU_ENCRYPT_KEY,
     SERVER_HOST,
     SERVER_PORT,
-    DEBUG_MODE,
     RATE_LIMIT_PER_USER,
     PUBLIC_BASE_URL,
     UPLOAD_DIR,
 )
-from src.feishu.crypto import FeishuMsgCrypt
+from src.feishu.ws_client import FeishuWSClient
 from src.logging_setup import setup_logging
 from src.session_manager import get_user_session, USER_SESSIONS, cleanup_expired_sessions
-from src.tool_governance import execute_tool_with_permission_check
 from src.metrics import metrics
 from src.thought_recorder import ThoughtRecorder
 from src.retry_utils import call_llm_with_fallback
@@ -52,19 +73,66 @@ load_dotenv()
 # ── 日志初始化 ────────────────────────────────────────────────
 setup_logging()
 
-app = FastAPI(title="WorkMate Agent", version="2.0.0")
+app = FastAPI(title="WorkMate Agent", version="1.0")
 
 # ── 静态文件服务（图片上传目录）────────────────────────────────
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-graph = compile_graph()
+# ── 上传文件原始名称映射（UUID 存储名 → 用户上传时的真实文件名）──
+_UPLOAD_NAMES_PATH = os.path.join(UPLOAD_DIR, "_filenames.json")
+
+
+def _load_upload_names() -> dict:
+    """加载上传文件的 UUID → 原始名称映射"""
+    if os.path.exists(_UPLOAD_NAMES_PATH):
+        try:
+            with open(_UPLOAD_NAMES_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_upload_names(mapping: dict):
+    """持久化上传文件名称映射"""
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    with open(_UPLOAD_NAMES_PATH, "w", encoding="utf-8") as f:
+        json.dump(mapping, f, ensure_ascii=False)
+
+
+def _resolve_upload_name(uuid_name: str) -> str:
+    """将 UUID 存储名解析为用户上传时的原始文件名"""
+    if not uuid_name:
+        return uuid_name
+    mapping = _load_upload_names()
+    return mapping.get(uuid_name, uuid_name)
+
+
+# v1.2: Lazy graph — 延迟到首次调用时编译，避免启动时阻塞
+_graph = None
+
+
+def _get_graph():
+    global _graph
+    if _graph is None:
+        _graph = compile_graph()
+    return _graph
+
 
 # ── 会话锁：确保同一会话串行执行，避免上下文串台 ──────────────
 session_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
+# ── 飞书最近上传文件追踪（chat_id → local_path）────────────────
+_recent_feishu_files: dict[str, str] = {}
+
 # ── 简易频率限制 ──────────────────────────────────────────────
 rate_limit_store: dict[str, list[float]] = defaultdict(list)
+
+# ── 异步任务状态追踪 ──────────────────────────────────────────
+# task_id → {"status": "pending"|"processing"|"done"|"error", "progress": str, "result": dict}
+task_store: dict[str, dict] = {}
+task_store_lock = asyncio.Lock()
 
 
 def check_rate_limit(user_id: str, limit: int = RATE_LIMIT_PER_USER) -> bool:
@@ -80,9 +148,14 @@ def check_rate_limit(user_id: str, limit: int = RATE_LIMIT_PER_USER) -> bool:
 
 
 # ── 简单认证 ──────────────────────────────────────────────────
+# 账号密码从环境变量读取（见 .env.example），不要写死在代码里
 AUTH_USERS = {
-    "admin": {"password": "admin", "role": "admin"},
-    "hk": {"password": "hk123456", "role": "feishu_user", "feishu_user_id": "ou_1061605d1e908bd38c523215faeb7428"},
+    "admin": {"password": os.getenv("ADMIN_PASSWORD", "admin"), "role": "admin"},
+    "hk": {
+        "password": os.getenv("HK_PASSWORD", ""),
+        "role": "feishu_user",
+        "feishu_user_id": os.getenv("HK_FEISHU_USER_ID", ""),
+    },
 }
 
 auth_tokens: dict[str, dict] = {}
@@ -219,14 +292,27 @@ def _strip_markdown_for_feishu(text: str) -> str:
     return text.strip()
 
 
-async def send_feishu_message(chat_id: str, text: str):
-    """通过飞书 API 发送消息，自动洗掉 Markdown 标记"""
+async def send_feishu_message(chat_id: str, text: str, chat_type: str = ""):
+    """通过飞书 API 发送消息，自动洗掉 Markdown 标记
+
+    Args:
+        chat_id: 会话 ID (oc_xxx 或 ou_xxx)
+        text: 消息文本
+        chat_type: 会话类型 (\"p2p\" 或 \"group\")，用于决定 receive_id_type
+    """
     logger = logging.getLogger("agent_thought")
     token = await get_tenant_access_token()
 
+    # p2p 私聊的 chat_id 是 ou_xxx (open_id)，需要 receive_id_type=open_id
+    # group 群聊的 chat_id 是 oc_xxx，需要 receive_id_type=chat_id
+    if chat_type == "p2p" or chat_id.startswith("ou_"):
+        receive_id_type = "open_id"
+    else:
+        receive_id_type = "chat_id"
+
     url = (
         "https://open.feishu.cn/open-apis/im/v1/messages"
-        "?receive_id_type=chat_id"
+        f"?receive_id_type={receive_id_type}"
     )
 
     cleaned = _strip_markdown_for_feishu(text)
@@ -270,7 +356,7 @@ async def download_feishu_file(message_id: str, file_key: str, file_name: str) -
     local_path = os.path.join(knowledge_dir, safe_name)
 
     logger = logging.getLogger("agent_thought")
-    logger.info(f"下载飞书文件: {file_name} → {local_path}")
+    logger.info(f"下载飞书文件: file_name={file_name}, message_id={message_id}, file_key={file_key}")
 
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, headers=headers, timeout=30)
@@ -280,8 +366,16 @@ async def download_feishu_file(message_id: str, file_key: str, file_name: str) -
             logger.info(f"飞书文件已保存: {local_path} ({len(resp.content)} bytes)")
             return local_path
         else:
-            logger.error(f"下载飞书文件失败: status={resp.status_code}, body={resp.text[:200]}")
-            raise Exception(f"下载文件失败: {resp.status_code}")
+            # 解析飞书错误响应
+            try:
+                err_data = resp.json()
+                err_code = err_data.get("code", "unknown")
+                err_msg = err_data.get("msg", resp.text[:200])
+            except Exception:
+                err_code = str(resp.status_code)
+                err_msg = resp.text[:200]
+            logger.error(f"下载飞书文件失败: status={resp.status_code}, code={err_code}, msg={err_msg}")
+            raise Exception(f"HTTP {resp.status_code}, 错误码 {err_code}: {err_msg}")
 
 
 async def download_feishu_image(message_id: str, image_key: str) -> str:
@@ -310,7 +404,46 @@ async def download_feishu_image(message_id: str, image_key: str) -> str:
             raise Exception(f"下载图片失败: {resp.status_code}")
 
 
-# ── 统一消息处理（Webhook 和长连接复用） ──────────────────────
+def _generate_file_summary(file_path: str, file_name: str) -> str:
+    """读取文档文件，用 LLM 生成 1-2 句话的内容摘要（供飞书回复使用）"""
+    try:
+        text = _lazy_import("load_document")(file_path)
+    except Exception as e:
+        logging.getLogger("agent_thought").warning(f"文档加载失败，跳过摘要: {e}")
+        return ""
+
+    if not text or not text.strip():
+        return ""
+
+    # 截取前 2000 字符作为摘要素材
+    preview = text[:2000] if len(text) > 2000 else text
+
+    try:
+        summary_llm = ChatOpenAI(
+            model=MODEL_NAME,
+            api_key=DEEPSEEK_API_KEY,
+            base_url=DEEPSEEK_BASE_URL,
+            temperature=0.3,
+        )
+        prompt = (
+            f"你是一个文档分析助手。请用1-2句话概括以下文档的主要内容，"
+            f"让读者快速了解这份文件是什么、有什么用。"
+            f"如果文档中包含链接、表格等结构化信息，也请简要提及。\n\n"
+            f"文件名：{file_name}\n"
+            f"文档内容（节选）：\n{preview}\n\n"
+            f"请直接输出概括（不要加\"这份文档\"开头），控制在80字以内："
+        )
+        response = summary_llm.invoke([HumanMessage(content=prompt)])
+        summary = response.content.strip() if hasattr(response, "content") else str(response).strip()
+        # 清理可能的引号包裹
+        summary = summary.strip('"').strip("'").strip("「").strip("」")
+        return summary
+    except Exception as e:
+        logging.getLogger("agent_thought").warning(f"文件摘要生成失败: {e}")
+        return ""
+
+
+# ── 统一消息处理（Webhook 回调入口） ──────────────────────────
 async def process_message(event_data):
     """统一的消息处理入口，集成会话治理、指标、思考记录
     支持两种输入：飞书 SDK 的 EventContext 对象、Webhook 的 dict
@@ -318,51 +451,85 @@ async def process_message(event_data):
     import logging
     thought_logger = logging.getLogger("agent_thought")
 
-    # 兼容 EventContext 对象和 dict 两种格式
+    # 解析 Webhook JSON 事件
     msg_type = ""
     file_key = ""
     file_name = ""
     image_key = ""
-    if hasattr(event_data, "event"):
-        # 飞书 SDK EventContext 对象（长连接模式）
-        event = event_data.event
-        sender_id_obj = event.sender.sender_id
-        user_id = sender_id_obj.user_id or sender_id_obj.open_id or "unknown"
-        message = event.message
-        chat_id = message.chat_id or user_id
-        msg_content = message.content or "{}"
-        msg_type = getattr(message, "msg_type", "") or getattr(message, "message_type", "")
-        file_key = getattr(message, "file_key", "") or ""
-        file_name = getattr(message, "file_name", "") or ""
-        image_key = getattr(message, "image_key", "") or ""
-    elif isinstance(event_data, dict):
-        # Webhook JSON dict
-        event = event_data.get("event", {})
-        sender = event.get("sender", {}).get("sender_id", {})
-        user_id = sender.get("user_id") or sender.get("open_id", "unknown")
-        message = event.get("message", {})
-        chat_id = message.get("chat_id", user_id)
-        msg_content = message.get("content", "{}")
-        msg_type = message.get("msg_type", "") or message.get("message_type", "")
-        file_key = message.get("file_key", "")
-        file_name = message.get("file_name", "")
-        image_key = message.get("image_key", "")
-    else:
+    if not isinstance(event_data, dict):
         thought_logger.error(f"未知的消息格式: {type(event_data)}")
         return {"code": -1, "msg": "unknown message format"}
 
+    event = event_data.get("event", {})
+    sender = event.get("sender", {}).get("sender_id", {})
+    user_id = sender.get("user_id") or sender.get("open_id", "unknown")
+    message = event.get("message", {})
+    chat_id = message.get("chat_id", user_id)
+    msg_content = message.get("content", "{}")
+    msg_type = message.get("msg_type", "") or message.get("message_type", "")
+    file_key = message.get("file_key", "")
+    file_name = message.get("file_name", "")
+    image_key = message.get("image_key", "")
+
+    # 从 content JSON 中回退提取 file_key / file_name / image_key
+    # 飞书 v2 事件中，这些字段嵌套在 content JSON 内，而非 message 顶层
+    if not file_key:
+        try:
+            content_json = json.loads(msg_content)
+            file_key = content_json.get("file_key", "")
+            if not file_name:
+                file_name = content_json.get("file_name", "")
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    if not image_key:
+        try:
+            content_json = json.loads(msg_content)
+            image_key = content_json.get("image_key", "")
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     # 文件消息 → 下载并入库 RAG 知识库
+    file_text_from_caption = ""
     if msg_type == "file" and file_key:
         message_id = message.message_id if hasattr(message, "message_id") else message.get("message_id", "")
+        thought_logger.info(f"飞书文件消息: message_id={message_id}, file_key={file_key}, file_name={file_name}, chat_id={chat_id}")
         try:
             local_path = await download_feishu_file(message_id, file_key, file_name)
-            build_index()
-            thought_logger.info(f"飞书文件已入库: {local_path}")
-            await send_feishu_message(chat_id, f"已收到文件「{file_name}」，已自动添加到知识库。")
+            _recent_feishu_files[chat_id] = local_path
+            doc_count = _lazy_import("build_index")()
+            thought_logger.info(f"飞书文件已入库: {local_path}, 索引块数: {doc_count}")
+
+            # 生成智能摘要回复
+            summary = _generate_file_summary(local_path, file_name)
+            if summary:
+                reply = (
+                    f"已收到文件「{file_name}」\n\n"
+                    f"📄 {summary}\n\n"
+                    f"💡 文件已自动添加到知识库，有什么想了解的请随时提问。"
+                )
+            else:
+                reply = (
+                    f"已收到文件「{file_name}」，已自动添加到知识库。"
+                    f"有什么想了解的请随时提问。"
+                )
+            await send_feishu_message(chat_id, reply)
         except Exception as e:
-            thought_logger.error(f"飞书文件入库失败: {e}")
+            thought_logger.error(f"飞书文件入库失败: {e}, message_id={message_id}, file_key={file_key}")
             await send_feishu_message(chat_id, f"文件接收失败：{e}")
-        return {"code": 0, "msg": "file_processed"}
+            return {"code": -1, "msg": "file_download_failed"}
+
+        # 检查是否有附带文本（用户发文件时可能同时输入了问题）
+        try:
+            content_json = json.loads(msg_content)
+            file_text_from_caption = content_json.get("text", "").strip()
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        # 如果没有附带文本，回复摘要后返回
+        if not file_text_from_caption:
+            return {"code": 0, "msg": "file_processed"}
+        # 有附带文本：继续走后续管线，text 设为 caption 内容
 
     # 图片消息 → 下载并通过智谱视觉分析
     image_url_for_graph = ""
@@ -376,10 +543,36 @@ async def process_message(event_data):
             await send_feishu_message(chat_id, "图片接收失败，请重试。")
             return {"code": -1, "msg": "image_download_failed"}
 
-    try:
-        text = json.loads(msg_content).get("text", "")
-    except (json.JSONDecodeError, TypeError):
-        text = str(msg_content)
+        # 图片无附带文本时：调用视觉分析并回复智能摘要
+        try:
+            caption_text = json.loads(msg_content).get("text", "").strip()
+        except (json.JSONDecodeError, TypeError):
+            caption_text = ""
+        if not caption_text:
+            try:
+                from src.vision_adapter import analyze_image
+                img_desc = analyze_image(image_url_for_graph)
+                img_summary = img_desc[:200] if len(img_desc) > 200 else img_desc
+                reply = (
+                    f"已收到图片\n\n"
+                    f"🖼️ {img_summary}\n\n"
+                    f"💡 有什么想了解的请随时提问。"
+                )
+                await send_feishu_message(chat_id, reply)
+                return {"code": 0, "msg": "image_processed"}
+            except Exception as e:
+                thought_logger.warning(f"图片摘要生成失败: {e}")
+                await send_feishu_message(chat_id, "已收到图片，有什么想了解的请随时提问。")
+                return {"code": 0, "msg": "image_processed"}
+
+    # 提取文本：文件消息的附带文本优先，否则从 content 解析
+    if file_text_from_caption:
+        text = file_text_from_caption
+    else:
+        try:
+            text = json.loads(msg_content).get("text", "")
+        except (json.JSONDecodeError, TypeError):
+            text = str(msg_content)
 
     # 纯图片消息（无文本）使用默认提示
     if image_url_for_graph and not text.strip():
@@ -420,15 +613,33 @@ async def process_message(event_data):
         config = {"configurable": {"thread_id": feishu_session_id}}
         user_msg = HumanMessage(content=text)
 
+        # 加载最近上传的飞书文件内容，注入到图状态
+        doc_text = ""
+        doc_filename = ""
+        recent_file_path = _recent_feishu_files.get(chat_id, "")
+        if recent_file_path and os.path.exists(recent_file_path):
+            try:
+                doc_text = _lazy_import("load_document")(recent_file_path)
+                doc_filename = os.path.basename(recent_file_path)
+                thought_logger.info(f"注入最近文件: {doc_filename} ({len(doc_text)} 字符)")
+            except Exception as e:
+                thought_logger.warning(f"加载最近文件失败: {e}")
+
         try:
             result = await asyncio.to_thread(
-                graph.invoke,
-                {
-                    "messages": [user_msg],
-                    "query": text,
-                    "image_url": image_url_for_graph or "",
-                },
-                config,
+                lambda: _get_graph().invoke(
+                    {
+                        "messages": [user_msg],
+                        "query": text,
+                        "image_url": image_url_for_graph or "",
+                        "document_text": doc_text,
+                        "document_filename": doc_filename,
+                        # v1.1: 显式注入字段
+                        "injected_document": doc_text,
+                        "injected_document_filename": doc_filename,
+                    },
+                    config,
+                )
             )
             ai_reply = result.get("final_answer", "")
             recorder.record_thought("agent_route", result.get("route_decision", ""))
@@ -463,11 +674,20 @@ async def process_message(event_data):
         return {"code": 0, "reply": ai_reply}
 
 
+# ── 工具函数 ──────────────────────────────────────────────────
+def _parse_comma_list(value: str) -> list[str]:
+    """将逗号分隔的字符串解析为列表，过滤空值"""
+    if not value:
+        return []
+    return [v.strip() for v in value.split(",") if v.strip()]
+
+
 # ── 请求模型 ──────────────────────────────────────────────────
 class AskRequest(BaseModel):
     question: str
     session_id: str = "default"
     image_url: str = ""
+    document_filename: str = ""
 
 
 class SessionCreate(BaseModel):
@@ -480,37 +700,273 @@ async def index():
     return FileResponse("index.html")
 
 
+@app.get("/favicon.ico")
+async def favicon():
+    """返回空响应避免 404 噪音"""
+    return Response(status_code=204)
+
+
 # ── System status ─────────────────────────────────────────────
 @app.get("/api/status")
 async def status():
     return {
         "llm_connected": bool(DEEPSEEK_API_KEY),
         "model": "deepseek-chat",
-        "knowledge_ready": knowledge_is_ready(),
+        "knowledge_ready": _lazy_import("knowledge_is_ready")(),
         "sessions_count": len(session_store.list_all()),
-        "version": "2.0.0",
+        "version": "1.0",
     }
 
 
 # ── Knowledge base upload ─────────────────────────────────────
+ALLOWED_KB_EXTENSIONS = {".txt", ".pdf", ".docx", ".xlsx", ".md"}
+
 @app.post("/api/upload")
 async def upload(file: UploadFile = File(...)):
-    if not file.filename or not file.filename.endswith(".txt"):
-        raise HTTPException(400, "只支持 .txt 文件")
+    ext = os.path.splitext(file.filename or ".txt")[1].lower()
+    if not file.filename or ext not in ALLOWED_KB_EXTENSIONS:
+        raise HTTPException(400, f"只支持 {', '.join(sorted(ALLOWED_KB_EXTENSIONS))} 文件")
 
     content = await file.read()
-    file_path = os.path.join(
-        os.path.dirname(__file__), "data", "knowledge", file.filename
-    )
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    knowledge_dir = os.path.join(os.path.dirname(__file__), "data", "knowledge")
+    os.makedirs(knowledge_dir, exist_ok=True)
+    file_path = os.path.join(knowledge_dir, file.filename)
     with open(file_path, "wb") as f:
         f.write(content)
 
     try:
-        count = build_index()
+        # 优先增量更新，失败时回退到全量构建
+        count = _lazy_import("add_to_index")(file_path)
+        if count == 0:
+            logger = logging.getLogger("agent_thought")
+            logger.info(f"增量索引未添加新块，尝试全量构建")
+            count = _lazy_import("build_index")()
         return {"msg": "知识库已就绪", "chunks": count}
     except Exception as e:
-        raise HTTPException(500, f"索引构建失败: {e}")
+        # 增量失败时回退到全量重建
+        logging.getLogger("agent_thought").warning(f"增量索引失败 ({e})，回退到全量构建")
+        try:
+            count = _lazy_import("build_index")()
+            return {"msg": "知识库已就绪（全量重建）", "chunks": count}
+        except Exception as e2:
+            raise HTTPException(500, f"索引构建失败: {e2}")
+
+
+# ── Knowledge base management ──────────────────────────────────
+@app.get("/api/knowledge")
+async def get_knowledge_status():
+    """获取知识库状态和文件列表"""
+    import glob as _glob
+    knowledge_dir = os.path.join(os.path.dirname(__file__), "data", "knowledge")
+    os.makedirs(knowledge_dir, exist_ok=True)
+
+    files = []
+    for fpath in _glob.glob(os.path.join(knowledge_dir, "*")):
+        if os.path.isfile(fpath):
+            fname = os.path.basename(fpath)
+            fsize = os.path.getsize(fpath)
+            files.append({
+                "name": fname,
+                "size": fsize,
+                "size_display": f"{fsize / 1024:.1f} KB" if fsize < 1024 * 1024 else f"{fsize / 1024 / 1024:.1f} MB",
+            })
+
+    from src.rag.index_builder import get_collection
+    col = get_collection()
+    chunk_count = col.count() if col else 0
+
+    return {
+        "ready": _lazy_import("knowledge_is_ready")(),
+        "chunks": chunk_count,
+        "files": files,
+        "file_count": len(files),
+        "backend": os.getenv("VECTOR_STORE_BACKEND", "chroma"),
+    }
+
+
+@app.delete("/api/knowledge")
+async def delete_knowledge_base():
+    """删除整个知识库（向量索引 + 源文件）"""
+    import shutil
+    import glob as _glob
+
+    deleted_info = {"files_removed": 0, "vector_store_cleared": False, "errors": []}
+
+    # 1. 删除 ChromaDB 向量索引
+    try:
+        from src.rag.vector_store import get_vector_store
+        vs = get_vector_store()
+        if vs:
+            vs.delete_all()
+            deleted_info["vector_store_cleared"] = True
+    except Exception as e:
+        deleted_info["errors"].append(f"向量库清理失败: {e}")
+
+    # 2. 清空知识库目录下的文件
+    knowledge_dir = os.path.join(os.path.dirname(__file__), "data", "knowledge")
+    if os.path.exists(knowledge_dir):
+        for fpath in _glob.glob(os.path.join(knowledge_dir, "*")):
+            try:
+                if os.path.isfile(fpath):
+                    os.remove(fpath)
+                    deleted_info["files_removed"] += 1
+            except Exception as e:
+                deleted_info["errors"].append(f"删除文件 {os.path.basename(fpath)} 失败: {e}")
+
+    logging.getLogger("agent_thought").info(
+        f"知识库已清空: {deleted_info['files_removed']} 文件, "
+        f"向量库: {deleted_info['vector_store_cleared']}"
+    )
+
+    return {
+        "msg": "知识库已清空",
+        "details": deleted_info,
+    }
+
+
+@app.delete("/api/knowledge/files/{filename}")
+async def delete_knowledge_file(filename: str):
+    """删除知识库中的单个文件并重建索引"""
+    knowledge_dir = os.path.join(os.path.dirname(__file__), "data", "knowledge")
+    file_path = os.path.join(knowledge_dir, filename)
+
+    # 安全检查：防止路径穿越
+    real_path = os.path.realpath(file_path)
+    real_knowledge = os.path.realpath(knowledge_dir)
+    if not real_path.startswith(real_knowledge):
+        raise HTTPException(403, "非法的文件路径")
+
+    if not os.path.exists(file_path):
+        raise HTTPException(404, f"文件不存在: {filename}")
+
+    try:
+        os.remove(file_path)
+        # 优先从索引中增量删除
+        removed = _lazy_import("remove_from_index")(filename)
+        if removed == 0:
+            # 没有向量索引记录，回退到全量重建
+            count = _lazy_import("build_index")()
+        else:
+            count = removed
+        logging.getLogger("agent_thought").info(f"知识库文件已删除: {filename}，移除索引: {count} 块")
+        return {"msg": f"已删除 {filename}，索引已更新", "chunks": count}
+    except Exception as e:
+        raise HTTPException(500, f"删除失败: {e}")
+
+
+# ── 异步文档上传（后台处理 + 状态轮询） ──────────────────────────
+@app.post("/api/upload-async")
+async def upload_async(file: UploadFile = File(...)):
+    """异步上传文档：立即返回任务 ID，后台处理，前端通过 /api/task/{id} 轮询状态"""
+    ext = os.path.splitext(file.filename or ".txt")[1].lower()
+    if not file.filename or ext not in ALLOWED_KB_EXTENSIONS:
+        raise HTTPException(400, f"只支持 {', '.join(sorted(ALLOWED_KB_EXTENSIONS))} 文件")
+
+    task_id = uuid.uuid4().hex[:12]
+
+    # 保存文件
+    knowledge_dir = os.path.join(os.path.dirname(__file__), "data", "knowledge")
+    os.makedirs(knowledge_dir, exist_ok=True)
+    content = await file.read()
+    file_path = os.path.join(knowledge_dir, file.filename)
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    # 注册任务
+    async with task_store_lock:
+        task_store[task_id] = {
+            "status": "pending",
+            "progress": "文件已保存，等待处理",
+            "filename": file.filename,
+            "result": None,
+            "created_at": time.time(),
+        }
+
+    # 启动后台处理
+    asyncio.create_task(_process_document_async(task_id, file_path, file.filename))
+
+    return {
+        "task_id": task_id,
+        "status": "pending",
+        "msg": "上传成功，正在处理中...",
+    }
+
+
+async def _process_document_async(task_id: str, file_path: str, filename: str):
+    """后台异步处理文档：解析 + 索引"""
+    logger = logging.getLogger("agent_thought")
+
+    async def _update_status(status: str, progress: str, result: dict = None):
+        async with task_store_lock:
+            if task_id in task_store:
+                task_store[task_id]["status"] = status
+                task_store[task_id]["progress"] = progress
+                if result:
+                    task_store[task_id]["result"] = result
+
+    try:
+        await _update_status("processing", "正在解析文档...")
+
+        # 在线程池中运行同步的文档解析（避免阻塞事件循环）
+        text = await asyncio.to_thread(_lazy_import("load_document"), file_path)
+
+        if not text or not text.strip():
+            await _update_status("error", "文档解析失败：内容为空或解析超时",
+                                 {"error": "文档解析失败，请检查文件是否损坏"})
+            return
+
+        await _update_status("processing", f"文档解析完成 ({len(text)} 字符)，正在构建索引...")
+
+        # 增量索引
+        count = await asyncio.to_thread(_lazy_import("add_to_index"), file_path)
+        if count == 0:
+            await _update_status("processing", "增量索引未生效，正在全量重建...")
+            count = await asyncio.to_thread(_lazy_import("build_index"))
+
+        await _update_status("done", "处理完成", {
+            "chunks": count,
+            "text_length": len(text),
+            "preview": text[:300] if len(text) > 300 else text,
+        })
+
+        logger.info(f"异步文档处理完成: {filename} → {count} 块")
+
+        # 生成摘要（可选）
+        summary = _generate_file_summary(file_path, filename)
+        if summary:
+            async with task_store_lock:
+                if task_id in task_store and task_store[task_id].get("result"):
+                    task_store[task_id]["result"]["summary"] = summary
+
+    except Exception as e:
+        logger.error(f"异步文档处理失败 {filename}: {e}")
+        await _update_status("error", f"处理失败: {str(e)[:100]}",
+                             {"error": f"文档处理失败: {str(e)[:200]}"})
+
+
+@app.get("/api/task/{task_id}")
+async def get_task_status(task_id: str):
+    """轮询异步任务状态"""
+    async with task_store_lock:
+        task = task_store.get(task_id)
+    if not task:
+        raise HTTPException(404, "任务不存在或已过期")
+    return task
+
+
+# ── 清理过期任务（启动时和定期执行） ──────────────────────────
+async def cleanup_expired_tasks():
+    """清理超过 30 分钟的已完成/错误任务"""
+    async with task_store_lock:
+        now = time.time()
+        expired = [
+            tid for tid, t in task_store.items()
+            if now - t.get("created_at", 0) > 1800
+        ]
+        for tid in expired:
+            del task_store[tid]
+    if expired:
+        logging.getLogger("agent_thought").info(f"清理了 {len(expired)} 个过期任务")
 
 
 # ── Image upload (for vision pipeline) ──────────────────────────
@@ -527,20 +983,84 @@ async def upload_image(file: UploadFile = File(...)):
     with open(file_path, "wb") as f:
         f.write(content)
 
+    # ── 记录原始文件名映射 ──
+    names = _load_upload_names()
+    names[safe_name] = file.filename or safe_name
+    _save_upload_names(names)
+
     public_url = f"{PUBLIC_BASE_URL}/uploads/{safe_name}"
     logging.getLogger("agent_thought").info(f"图片已上传: {safe_name} → {public_url}")
-    return {"url": public_url, "filename": safe_name}
+    return {"url": public_url, "filename": safe_name, "original_name": file.filename}
+
+
+# ── Document upload (for document pipeline) ─────────────────────
+DOC_ALLOWED_EXT = {".txt", ".pdf", ".docx", ".xlsx", ".md"}
+
+@app.post("/api/upload-document")
+async def upload_document(file: UploadFile = File(...)):
+    """上传文档文件（PDF/Word/Excel/TXT），返回解析预览"""
+    ext = os.path.splitext(file.filename or ".txt")[1].lower()
+    if ext not in DOC_ALLOWED_EXT:
+        raise HTTPException(400, f"不支持的文档格式: {ext}，支持 {', '.join(sorted(DOC_ALLOWED_EXT))}")
+
+    safe_name = f"{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(UPLOAD_DIR, safe_name)
+    content = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    # ── 记录原始文件名映射（UUID → 用户上传的真实文件名）──
+    names = _load_upload_names()
+    names[safe_name] = file.filename or safe_name
+    _save_upload_names(names)
+
+    # ── 同时保存到知识库目录并增量索引（让 RAG 也能查到） ──
+    kb_dir = os.path.join(os.path.dirname(__file__), "data", "knowledge")
+    os.makedirs(kb_dir, exist_ok=True)
+    kb_path = os.path.join(kb_dir, file.filename or safe_name)
+    with open(kb_path, "wb") as f:
+        f.write(content)
+    try:
+        chunk_count = _lazy_import("add_to_index")(kb_path)
+        if chunk_count == 0:
+            chunk_count = _lazy_import("build_index")()
+        logging.getLogger("agent_thought").info(
+            f"文档已同步到知识库: {file.filename} → {chunk_count} 块"
+        )
+    except Exception as e:
+        logging.getLogger("agent_thought").warning(f"知识库索引更新跳过: {e}")
+
+    # 解析文档获取文本预览（带超时保护）
+    text = ""
+    preview = ""
+    try:
+        text = _lazy_import("load_document")(file_path)
+        preview = text[:500] if len(text) > 500 else text
+    except Exception as e:
+        logging.getLogger("agent_thought").warning(f"文档预览生成失败: {e}")
+        preview = "(文档解析超时或失败，请稍后在知识库中查看)"
+
+    logging.getLogger("agent_thought").info(f"文档已上传: {safe_name} → {len(text) if text else 0} 字符")
+    return {
+        "url": f"{PUBLIC_BASE_URL}/uploads/{safe_name}",
+        "filename": safe_name,
+        "original_name": file.filename,
+        "preview": preview,
+        "text_length": len(text) if text else 0,
+    }
 
 
 # ── Non-streaming chat ────────────────────────────────────────
 @app.post("/api/ask")
 async def ask(req: AskRequest):
-    if not knowledge_is_ready():
+    # 提供了文档或图片时，允许绕过知识库检查（文档已自动入库，或走直接注入流程）
+    has_document = bool(req.document_filename) or bool(req.image_url)
+    if not _lazy_import("knowledge_is_ready")() and not has_document:
         raise HTTPException(400, "知识库未就绪，请先上传文档")
 
     config = {"configurable": {"thread_id": req.session_id}}
 
-    snapshot = graph.get_state(config)
+    snapshot = _get_graph().get_state(config)
     existing_messages = []
     if snapshot and snapshot.values:
         existing_messages = list(snapshot.values.get("messages", []))
@@ -548,15 +1068,30 @@ async def ask(req: AskRequest):
     is_first = len(existing_messages) == 0
     user_msg = HumanMessage(content=req.question.strip())
 
+    # 读取文档（如果有）
+    doc_text = ""
+    if req.document_filename:
+        doc_path = os.path.join(UPLOAD_DIR, req.document_filename)
+        if os.path.exists(doc_path):
+            try:
+                doc_text = _lazy_import("load_document")(doc_path)
+            except Exception:
+                doc_text = ""
+
     # 接入 SessionManager
     web_session = get_user_session(req.session_id)
 
     try:
-        result = graph.invoke(
+        result = _get_graph().invoke(
             {
                 "messages": [user_msg],
                 "query": req.question.strip(),
                 "image_url": req.image_url or "",
+                "document_text": doc_text,
+                "document_filename": _resolve_upload_name(req.document_filename or ""),
+                # v1.1: 显式注入字段，替代 [系统提示] 字符串 hack
+                "injected_document": doc_text,
+                "injected_document_filename": _resolve_upload_name(req.document_filename or ""),
             },
             config,
         )
@@ -590,8 +1125,13 @@ async def ask_stream(
     question: str,
     session_id: str = "default",
     image_url: str = Query(""),
+    image_urls: str = Query(""),
+    document_filename: str = Query(""),
+    document_filenames: str = Query(""),
 ):
-    if not knowledge_is_ready():
+    # 提供了文档或图片时，允许绕过知识库检查
+    has_document = bool(document_filename) or bool(document_filenames) or bool(image_url) or bool(image_urls)
+    if not _lazy_import("knowledge_is_ready")() and not has_document:
         raise HTTPException(400, "知识库未就绪，请先上传文档")
 
     if not question.strip():
@@ -603,7 +1143,7 @@ async def ask_stream(
     # 接入 SessionManager：治理 Web 会话（过期检测 + 指标统计）
     web_session = get_user_session(session_id)
 
-    snapshot = graph.get_state({"configurable": {"thread_id": session_id}})
+    snapshot = _get_graph().get_state({"configurable": {"thread_id": session_id}})
     existing_messages = []
     if snapshot and snapshot.values:
         existing_messages = list(snapshot.values.get("messages", []))
@@ -611,12 +1151,28 @@ async def ask_stream(
     if is_first:
         session_store.set_title_from_first_message(session_id, question)
 
+    # ── 合并多图片/多文档参数 ──
+    _image_urls = _parse_comma_list(image_urls)
+    if image_url and image_url not in _image_urls:
+        _image_urls.insert(0, image_url)
+    _doc_filenames = _parse_comma_list(document_filenames)
+    if document_filename and document_filename not in _doc_filenames:
+        _doc_filenames.insert(0, document_filename)
+
     async def event_generator():
         try:
             async for sse_chunk in run_agent_stream(
-                question.strip(), session_id, image_url=image_url or None
+                question.strip(),
+                session_id,
+                image_urls=_image_urls if _image_urls else None,
+                document_filenames=_doc_filenames if _doc_filenames else None,
             ):
-                yield sse_chunk.encode("utf-8")
+                try:
+                    yield sse_chunk.encode("utf-8")
+                except ConnectionResetError:
+                    return
+        except ConnectionResetError:
+            pass
         except Exception as e:
             error_data = json.dumps({"error": str(e)}, ensure_ascii=False)
             yield f"event: error\ndata: {error_data}\n\n".encode("utf-8")
@@ -659,7 +1215,7 @@ async def delete_session(session_id: str):
 @app.get("/api/sessions/{session_id}/history")
 async def get_history(session_id: str):
     config = {"configurable": {"thread_id": session_id}}
-    snapshot = graph.get_state(config)
+    snapshot = _get_graph().get_state(config)
     messages = []
     if snapshot and snapshot.values:
         for msg in snapshot.values.get("messages", []):
@@ -704,63 +1260,14 @@ async def auth_me(token: str = Query(...)):
 
 
 # ── 飞书回调 ──────────────────────────────────────────────────
+# 已切换为 WebSocket 长连接模式，此端点仅作健康检查
 @app.get("/feishu/callback")
-async def feishu_verify(
-    challenge: str = Query(None),
-    token: str = Query(None),
-):
-    # 本地测试：无参数时返回提示
-    if not challenge or not token:
-        return PlainTextResponse("本地测试：飞书回调接口正常！")
-
-    print(f"[Feishu GET] challenge={challenge[:30]}..., token={token}")
-    if FEISHU_VERIFICATION_TOKEN and token != FEISHU_VERIFICATION_TOKEN:
-        print("[Feishu GET] Token 验证失败")
-        raise HTTPException(403, "Token 验证失败")
-
-    return {"challenge": challenge}
-
+async def feishu_verify():
+    return {"status": "ok", "mode": "websocket", "message": "飞书长连接已启用，HTTP 回调已停用"}
 
 @app.post("/feishu/callback")
-async def feishu_callback(request: Request):
-    body = await request.body()
-    body_str = body.decode()
-    print(f"[Feishu POST] body={body_str[:200]}")
-
-    try:
-        data = json.loads(body_str)
-    except json.JSONDecodeError:
-        raise HTTPException(400, "请求体不是有效的 JSON")
-
-    # URL 验证（飞书新版验证用 POST）
-    event_type = data.get("type", "")
-    if event_type == "url_verification":
-        token = data.get("token", "")
-        if FEISHU_VERIFICATION_TOKEN and token != FEISHU_VERIFICATION_TOKEN:
-            raise HTTPException(403, "Token 验证失败")
-
-        if "encrypt" in data and FEISHU_ENCRYPT_KEY:
-            crypt = FeishuMsgCrypt(FEISHU_ENCRYPT_KEY, FEISHU_APP_ID)
-            decrypted = crypt.decrypt(data["encrypt"])
-            challenge = decrypted.get("challenge", "")
-        else:
-            challenge = data.get("challenge", "")
-
-        print(f"[Feishu] URL 验证成功")
-        return {"challenge": challenge}
-
-    # 事件解密
-    event = None
-    if "encrypt" in data and FEISHU_ENCRYPT_KEY:
-        crypt = FeishuMsgCrypt(FEISHU_ENCRYPT_KEY, FEISHU_APP_ID)
-        event = crypt.decrypt(data["encrypt"])
-    else:
-        event = data
-
-    # 异步处理消息，不阻塞飞书 3 秒超时
-    asyncio.create_task(process_message(event))
-
-    return {"code": 0}
+async def feishu_callback():
+    return {"status": "ok", "mode": "websocket", "message": "飞书长连接已启用，HTTP 回调已停用"}
 
 
 # ── 指标查询接口 ──────────────────────────────────────────────
@@ -784,57 +1291,39 @@ async def health():
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
 
 
-# ── 长连接模式（开发环境自动启动） ────────────────────────────
-def start_long_connection():
-    """飞书 WebSocket 长连接，无需内网穿透"""
-    try:
-        import lark_oapi as lark
-
-        def on_message(event_context):
-            """同步回调，在 WebSocket 事件循环中调度异步处理"""
-            try:
-                loop = asyncio.get_event_loop()
-                loop.create_task(process_message(event_context))
-            except Exception as e:
-                logging.getLogger("agent_thought").error(f"长连接调度失败: {e}")
-
-        event_handler = (
-            lark.EventDispatcherHandler.builder(
-                FEISHU_ENCRYPT_KEY, FEISHU_VERIFICATION_TOKEN
-            )
-            .register_p2_im_message_receive_v1(on_message)
-            .build()
-        )
-
-        cli = lark.ws.Client(
-            FEISHU_APP_ID,
-            FEISHU_APP_SECRET,
-            event_handler=event_handler,
-            log_level=lark.LogLevel.DEBUG if DEBUG_MODE else lark.LogLevel.INFO,
-        )
-        print("[长连接] 飞书 WebSocket 已启动")
-        cli.start()
-    except ImportError:
-        print("[长连接] lark-oapi 未安装，跳过 WebSocket 模式")
-    except Exception as e:
-        print(f"[长连接] 启动失败: {e}")
 
 
 # ── Startup ───────────────────────────────────────────────────
 @app.on_event("startup")
 async def startup_event():
-    print(f"WorkMate Agent v2.0.0 启动中...")
+    print(f"WorkMate Agent v1.0 启动中...")
     print(f"LLM: DeepSeek (deepseek-chat)")
-    print(f"知识库: {'已就绪' if knowledge_is_ready() else '未建库'}")
+    print(f"知识库: {'已就绪' if _lazy_import("knowledge_is_ready")() else '未建库'}")
     print(f"访问: http://{SERVER_HOST}:{SERVER_PORT}")
 
     # 上线前检查
     run_pre_launch_checks()
 
-    # 开发环境启动长连接
-    if DEBUG_MODE and FEISHU_APP_ID and FEISHU_APP_SECRET:
-        threading.Thread(target=start_long_connection, daemon=True).start()
-        print("[启动] 开发模式，已启动飞书长连接线程")
+    # 定期清理过期任务（每 10 分钟）
+    async def _periodic_task_cleanup():
+        while True:
+            await asyncio.sleep(600)
+            await cleanup_expired_tasks()
+
+    asyncio.create_task(_periodic_task_cleanup())
+
+    # 启动飞书 WebSocket 长连接（无需公网 URL，无需 cpolar）
+    if FEISHU_APP_ID and FEISHU_APP_SECRET:
+        feishu_ws = FeishuWSClient(
+            app_id=FEISHU_APP_ID,
+            app_secret=FEISHU_APP_SECRET,
+            on_event=process_message,
+        )
+        feishu_ws.start_background()
+        print(f"飞书长连接: 已启动")
+    else:
+        print(f"飞书长连接: 未配置 APP_ID/APP_SECRET，跳过")
+
 
 
 if __name__ == "__main__":

@@ -12,13 +12,55 @@ MODEL_NAME_REASONER = "deepseek-reasoner"
 EMBEDDING_MODEL = "deepseek-chat"
 EMBEDDING_DIM = 1024
 
+# ── 智谱 Embedding 配置 ─────────────────────────────────────────
+ZHIPU_EMBEDDING_ENDPOINT = "https://open.bigmodel.cn/api/paas/v4/embeddings"
+ZHIPU_EMBEDDING_MODEL = "embedding-3"
+ZHIPU_EMBEDDING_DIM = 2048
+
 # ── RAG 配置 ──────────────────────────────────────────────────
 CHROMA_PERSIST_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "chroma_db")
 KNOWLEDGE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "knowledge")
 
-CHUNK_SIZE = 512
-CHUNK_OVERLAP = 64
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "800"))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "150"))
 TOP_K_RETRIEVAL = 4
+
+# ── RAG 重排序配置 ──────────────────────────────────────────────
+RERANK_ENABLED = os.getenv("RERANK_ENABLED", "true").lower() == "true"
+RERANK_METHOD = os.getenv("RERANK_METHOD", "hybrid")  # "llm" | "keyword" | "hybrid"
+RERANK_CANDIDATE_MULTIPLIER = 3  # 粗排候选数是最终返回数的倍数
+
+# ── RAG 优化配置 (Token 降本) ────────────────────────────────────
+# 相似度阈值：distance > 此值才丢弃 (ChromaDB cosine distance: 0=完全相同, 1=正交, 2=完全相反)
+# 1.0 表示至少非负相关（cosine similarity >= 0），是合理的默认值
+SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "1.0"))
+# 最多返回的检索文档数（降低输入 Token）
+MAX_RETRIEVED_DOCS = int(os.getenv("MAX_RETRIEVED_DOCS", "2"))
+# 每个文档片段最大字符数（截断超长文本，保留核心信息）
+MAX_CHUNK_CHARS = int(os.getenv("MAX_CHUNK_CHARS", "800"))
+# 传入大模型的上下文总 Token 上限（最高 3000）
+MAX_CONTEXT_TOKENS = int(os.getenv("MAX_CONTEXT_TOKENS", "3000"))
+# 大模型回答最大 Token 数
+MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", "1024"))
+
+# ── 混合检索配置 ──────────────────────────────────────────────────
+# 是否启用 BM25 + 向量混合检索
+BM25_ENABLED = os.getenv("BM25_ENABLED", "true").lower() == "true"
+# BM25 权重 (0-1)，剩余为向量检索权重
+BM25_WEIGHT = float(os.getenv("BM25_WEIGHT", "0.3"))
+
+# ── 向量库配置 ──────────────────────────────────────────────────
+# 向量库后端: "chroma" | "milvus"
+VECTOR_STORE_BACKEND = os.getenv("VECTOR_STORE_BACKEND", "chroma")
+# Milvus 连接配置（使用 Milvus 时生效）
+MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
+MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
+MILVUS_COLLECTION = "workmate_knowledge"
+
+# ── RAG 评估配置 ────────────────────────────────────────────────
+EVAL_DATASET_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "data", "eval", "qrels.json"
+)
 
 # ── 数据存储 ──────────────────────────────────────────────────
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
@@ -50,9 +92,18 @@ TOOL_CALL_TIMEOUT = int(os.getenv("TOOL_CALL_TIMEOUT", "30"))
 STREAM_ENABLED = True
 MAX_HISTORY_MESSAGES = 20
 
-# ── 智谱 GLM-4.6V 视觉配置 ─────────────────────────────────────
-ZHIPU_API_KEY = os.getenv("ZHIPU_API_KEY", "64396755eafc4dd49f09040ab6d2c6c5.SVfVGZIv0tjMm1Li")
-VISION_MODEL = os.getenv("VISION_MODEL", "glm-4.6v")
+# ── MinerU 文档解析 API 配置 ───────────────────────────────────
+MINERU_API_TOKEN = os.getenv("MINERU_API_TOKEN", "")
+MINERU_BASE_URL = os.getenv("MINERU_BASE_URL", "https://mineru.net/api/v4")
+
+# ── 智谱视觉 + Embedding 配置 ───────────────────────────────────
+ZHIPU_API_KEY = os.getenv("ZHIPU_API_KEY", "")
+# 视觉模型选择（按视觉效果从强到弱）：
+#   glm-4v-plus  — 最强视觉理解（推荐：详细OCR、复杂图表、文档分析）
+#   glm-4.6v     — 4.6 系列视觉模型
+#   glm-4v       — 基础视觉模型
+#   glm-4v-flash — 轻量快速视觉模型
+VISION_MODEL = os.getenv("VISION_MODEL", "glm-4v-plus")
 VISION_ENDPOINT = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 
 # ── 图片上传配置 ────────────────────────────────────────────────

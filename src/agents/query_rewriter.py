@@ -1,3 +1,11 @@
+"""查询重写器：多轮对话意图提取
+
+v1.1 重构：
+- 删除所有 startswith("[系统提示]") 检测逻辑
+- 图片/文档上下文通过 state 独立字段传递，rewriter 只关注 query 本身
+- 简化重写逻辑：单轮直接透传，多轮用历史重写
+"""
+
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, MODEL_NAME
@@ -11,6 +19,11 @@ llm = ChatOpenAI(
 
 
 def rewrite_query(state: dict, current_query: str = "") -> dict:
+    """根据对话历史重写查询为独立、清晰的单句
+
+    v1.1: 不再检测 query 中的 [系统提示] 前缀。
+    query 始终是用户原始输入，图片/文档上下文由 solver 从独立字段读取。
+    """
     messages = state.get("messages", [])
     if not messages:
         return {"rewritten_query": current_query or state.get("query", "")}
@@ -18,12 +31,11 @@ def rewrite_query(state: dict, current_query: str = "") -> dict:
     last_msg = messages[-1]
     user_query = current_query or (last_msg.content if hasattr(last_msg, "content") else str(last_msg))
 
-    # 如果 query 包含图片分析结果（以 [系统提示] 开头），不对图片描述部分做重写
-    has_image_context = user_query.startswith("[系统提示] 用户发送了一张图片")
-
+    # 单轮对话：直接透传
     if len(messages) <= 1:
         return {"rewritten_query": user_query}
 
+    # 多轮对话：用历史重写
     history = []
     for msg in messages[:-1]:
         role = "用户" if getattr(msg, "type", "human") == "human" else "助手"
@@ -32,34 +44,7 @@ def rewrite_query(state: dict, current_query: str = "") -> dict:
 
     context = "\n".join(history[-6:])
 
-    if has_image_context:
-        # 图片场景：从图片描述后的用户说明中提取核心意图，但保留完整的图片上下文
-        marker = "用户对图片的说明：'"
-        after_marker = ""
-        if marker in user_query:
-            parts = user_query.split(marker, 1)
-            before = parts[0]  # 图片分析结果
-            after = parts[1].rstrip("'。") if len(parts) > 1 else ""
-            after_marker = after
-        core_query = after_marker or user_query
-
-        prompt = f"""你是一个查询重写助手。用户通过图片传达了信息，请根据对话历史和图片分析结果，重写一个完整的、清晰的、独立的查询。
-
-对话历史：
-{context}
-
-用户通过图片传达了以下信息（不需要重写这部分）：
-{user_query[:500]}...
-
-请提取用户的核心意图，重写为一句清晰的查询。只输出重写后的查询，不要添加任何解释。"""
-
-        response = llm.invoke([HumanMessage(content=prompt)])
-        rewritten = response.content.strip() if hasattr(response, "content") else str(response).strip()
-        # 将重写后的意图拼接到图片上下文之后，确保 solver 同时拥有两者
-        combined = f"{user_query}\n\n[重写后的意图] {rewritten}"
-        return {"rewritten_query": combined}
-    else:
-        prompt = f"""你是一个查询重写助手。根据对话历史和用户的最新问题，重写一个完整的、清晰的、独立的查询。
+    prompt = f"""你是一个查询重写助手。根据对话历史和用户的最新问题，重写一个完整的、清晰的、独立的查询。
 只输出重写后的查询，不要添加任何解释。
 
 对话历史：
@@ -69,6 +54,6 @@ def rewrite_query(state: dict, current_query: str = "") -> dict:
 
 重写后的查询："""
 
-        response = llm.invoke([HumanMessage(content=prompt)])
-        rewritten = response.content.strip() if hasattr(response, "content") else str(response).strip()
-        return {"rewritten_query": rewritten}
+    response = llm.invoke([HumanMessage(content=prompt)])
+    rewritten = response.content.strip() if hasattr(response, "content") else str(response).strip()
+    return {"rewritten_query": rewritten}

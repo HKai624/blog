@@ -34,6 +34,10 @@ class AgentMetrics:
         self.rag_total_latency_ms = 0.0
         self.rag_human_verified = 0
         self.rag_human_accurate = 0
+        # RAG 评估指标
+        self.rag_eval_recall_at_3 = 0.0
+        self.rag_eval_precision_at_3 = 0.0
+        self.rag_eval_mrr = 0.0
 
         self.start_time = time.time()
         self._is_dirty = False
@@ -64,6 +68,12 @@ class AgentMetrics:
         self.rag_human_verified += 1
         if is_accurate:
             self.rag_human_accurate += 1
+        self._is_dirty = True
+
+    def record_rag_eval(self, recall_at_3: float, precision_at_3: float, mrr: float):
+        self.rag_eval_recall_at_3 = recall_at_3
+        self.rag_eval_precision_at_3 = precision_at_3
+        self.rag_eval_mrr = mrr
         self._is_dirty = True
 
     def update_session_stats(self, session_manager_dict: dict):
@@ -141,6 +151,9 @@ class AgentMetrics:
                 "answer_accuracy_rate": accuracy_rate,
                 "total_rag_calls": self.rag_calls,
                 "total_human_reviews": self.rag_human_verified,
+                "eval_recall@3": self.rag_eval_recall_at_3,
+                "eval_precision@3": self.rag_eval_precision_at_3,
+                "eval_mrr": self.rag_eval_mrr,
             },
             "session_metrics": self.session_stats,
             "cost_metrics": {

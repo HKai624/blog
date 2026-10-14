@@ -1,20 +1,69 @@
 import json
 import logging
+import os
+import base64
 import time
 from typing import Optional
 
 import requests
 
-from src.config import ZHIPU_API_KEY, VISION_MODEL, VISION_ENDPOINT, API_RETRY_TIMES
+from src.config import ZHIPU_API_KEY, VISION_MODEL, VISION_ENDPOINT, API_RETRY_TIMES, UPLOAD_DIR
 
 thought_logger = logging.getLogger("agent_thought")
 
 
+def _is_local_url(url: str) -> bool:
+    """检测 URL 是否为本地地址（智谱 API 无法访问）"""
+    return any(prefix in url for prefix in [
+        "localhost", "127.0.0.1", "0.0.0.0", "192.168.", "10.", "172.16.",
+    ])
+
+
+def _url_to_base64_data_uri(url: str) -> str:
+    """将本地图片 URL 或文件路径转换为 base64 data URI"""
+    # 从 URL 提取文件路径
+    if url.startswith("http://") or url.startswith("https://"):
+        # localhost URL → 转换为文件路径
+        # 格式: http://localhost:8000/uploads/filename.png
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        path = parsed.path  # /uploads/filename.png
+        if path.startswith("/"):
+            path = path[1:]
+        file_path = os.path.join(os.path.dirname(UPLOAD_DIR), path)
+    else:
+        file_path = url
+
+    if not os.path.exists(file_path):
+        thought_logger.error(f"图片文件不存在: {file_path}")
+        raise FileNotFoundError(f"图片文件不存在: {file_path}")
+
+    # 检测 MIME 类型
+    ext = os.path.splitext(file_path)[1].lower()
+    mime_map = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".bmp": "image/bmp",
+    }
+    mime_type = mime_map.get(ext, "image/png")
+
+    with open(file_path, "rb") as f:
+        img_data = base64.b64encode(f.read()).decode("utf-8")
+
+    data_uri = f"data:{mime_type};base64,{img_data}"
+    thought_logger.info(f"本地图片已转 base64: {file_path} → {len(data_uri)} chars")
+    return data_uri
+
+
 def analyze_image(image_url: str, prompt: str = "") -> str:
-    """调用智谱 GLM-4.6V API，分析图片内容。
+    """调用智谱视觉模型 API（默认 glm-4v-plus），分析图片内容。
 
     Args:
-        image_url: 图片的公网可访问 URL（不支持本地路径和 Base64）。
+        image_url: 图片的 URL 或本地文件路径。
+                   公网 URL 直接传递；本地 URL/路径自动转为 base64。
         prompt: 可选的额外分析指令（拼接到默认 prompt 后面）。
 
     Returns:
@@ -22,6 +71,15 @@ def analyze_image(image_url: str, prompt: str = "") -> str:
     """
     if not prompt:
         prompt = "请详细描述这张图片的内容，包括：1) 图片类型（截图/照片/图表/文档等）；2) 图片中的所有文字信息；3) 图片传达的主要信息或意图。"
+
+    # 智能处理：本地 URL 自动转 base64，公网 URL 直接使用
+    if _is_local_url(image_url) or (not image_url.startswith("http")):
+        try:
+            image_url = _url_to_base64_data_uri(image_url)
+        except FileNotFoundError:
+            thought_logger.error(f"无法加载本地图片: {image_url}")
+            raise
+
     headers = {
         "Authorization": f"Bearer {ZHIPU_API_KEY}",
         "Content-Type": "application/json",

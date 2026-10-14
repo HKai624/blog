@@ -1,0 +1,82 @@
+[
+  {
+    "query": "年假怎么申请",
+    "relevant_docs": ["考勤与休假制度.txt_1", "企业制度FAQ.txt_0"]
+  },
+  {
+    "query": "报销流程是什么",
+    "relevant_docs": ["报销与财务管理.txt_0", "报销与财务管理.txt_1", "企业制度FAQ.txt_1"]
+  },
+  {
+    "query": "公司考勤制度",
+    "relevant_docs": ["考勤与休假制度.txt_0", "企业制度FAQ.txt_0"]
+  },
+  {
+    "query": "会议室如何预订",
+    "relevant_docs": ["会议室与办公资源.txt_0", "企业制度FAQ.txt_2"]
+  },
+  {
+    "query": "IT设备申请流程",
+    "relevant_docs": ["IT与设备管理.txt_0"]
+  },
+  {
+    "query": "出差报销需要什么材料",
+    "relevant_docs": ["报销与财务管理.txt_0"]
+  },
+  {
+    "query": "培训补贴多少钱",
+    "relevant_docs": ["培训与职业发展.txt_1"]
+  },
+  {
+    "query": "公司WiFi密码是什么",
+    "relevant_docs": ["IT与设备管理.txt_1"]
+  },
+  {
+    "query": "晋升通道有哪些",
+    "relevant_docs": ["培训与职业发展.txt_2"]
+  },
+  {
+    "query": "打印机怎么连接",
+    "relevant_docs": ["IT与设备管理.txt_3"]
+  },
+  {
+    "query": "年假有多少天",
+    "relevant_docs": ["考勤与休假制度.txt_2", "企业制度FAQ.txt_0"]
+  },
+  {
+    "query": "员工福利有哪些内容",
+    "relevant_docs": ["培训与职业发展.txt_3", "企业制度FAQ.txt_0"]
+  },
+  {
+    "query": "会议室预定有什么规则",
+    "relevant_docs": ["会议室与办公资源.txt_0", "会议室与办公资源.txt_1"]
+  },
+  {
+    "query": "VPN如何申请",
+    "relevant_docs": ["IT与设备管理.txt_1", "企业制度FAQ.txt_2"]
+  },
+  {
+    "query": "访客怎么接待",
+    "relevant_docs": ["会议室与办公资源.txt_2"]
+  },
+  {
+    "query": "新员工电脑怎么领取",
+    "relevant_docs": ["IT与设备管理.txt_0"]
+  },
+  {
+    "query": "加班费怎么计算",
+    "relevant_docs": ["考勤与休假制度.txt_0"]
+  },
+  {
+    "query": "病假需要什么证明",
+    "relevant_docs": ["考勤与休假制度.txt_1"]
+  },
+  {
+    "query": "婚假有多少天",
+    "relevant_docs": ["考勤与休假制度.txt_1"]
+  },
+  {
+    "query": "餐补标准是多少",
+    "relevant_docs": ["报销与财务管理.txt_0"]
+  }
+]

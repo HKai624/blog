@@ -1,30 +1,62 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WorkMate Agent — 智能职场行政助理</title>
-<script src="https://cdn.bootcdn.net/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<script src="https://cdn.bootcdn.net/ajax/libs/marked/9.1.6/marked.min.js" async></script>
 <style>
 :root {
-  --primary: #1A6DFF;
-  --primary-light: #E8F1FF;
-  --primary-dark: #1456CC;
-  --bg: #F7F8FA;
+  --primary: #3B82F6;
+  --primary-light: #F0F0F3;
+  --primary-dark: #1D1D1F;
+  --bg: #F5F5F7;
   --surface: #FFFFFF;
-  --border: #E8ECF1;
-  --text: #1D2129;
-  --text-secondary: #86909C;
-  --text-muted: #C9CDD4;
-  --success: #00B42A;
-  --warning: #FF7D00;
-  --danger: #F53F3F;
-  --radius: 8px;
-  --radius-lg: 12px;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
-  --shadow: 0 2px 8px rgba(0,0,0,0.06);
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --border: #E8E8EC;
+  --border-light: #F0F0F3;
+  --text: #1D1D1F;
+  --text-secondary: #86868B;
+  --text-muted: #AEAEB2;
+  --success: #34C759;
+  --warning: #FF9500;
+  --danger: #FF3B30;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.04);
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  color-scheme: light;
 }
+/* ── 深色模式 ── */
+[data-theme="dark"] {
+  --primary: #5E9EFF;
+  --primary-light: #222224;
+  --primary-dark: #F5F5F7;
+  --bg: #0D0D0D;
+  --surface: #1A1A1A;
+  --border: #2A2A2E;
+  --border-light: #222224;
+  --text: #F5F5F7;
+  --text-secondary: #98989D;
+  --text-muted: #6E6E73;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3);
+  color-scheme: dark;
+}
+[data-theme="dark"] .message-wrapper.assistant .message-bubble { background: #1E1E1E; border-color: #2A2A2E; }
+[data-theme="dark"] .message-wrapper.user .message-bubble { background: #2A2A2E; }
+[data-theme="dark"] .message-wrapper.assistant .message-bubble code { background: #2A2A2A; color: #E5E5E7; }
+[data-theme="dark"] .message-wrapper.assistant .message-bubble pre { background: #0A0A0A; }
+[data-theme="dark"] .message-wrapper.assistant .message-bubble th { background: #222; }
+[data-theme="dark"] .thinking-card .thinking-header { background: #1A1A1A; }
+[data-theme="dark"] .input-row textarea { background: #1A1A1A; color: #F5F5F7; border-color: #2A2A2E; }
+[data-theme="dark"] .btn-file, [data-theme="dark"] .btn-image { background: #1A1A1A; border-color: #2A2A2E; }
+[data-theme="dark"] .sidebar-footer .dot.on { background: #34C759; }
+[data-theme="dark"] .sidebar-footer .dot.off { background: #6E6E73; }
+[data-theme="dark"] .step-icon.done { background: #1A3A1A; }
+[data-theme="dark"] .step-icon.running { background: #3A2A1A; }
+[data-theme="dark"] .step-icon.pending { background: #222; }
+[data-theme="dark"] .sidebar-left, [data-theme="dark"] .sidebar-right, [data-theme="dark"] .chat-header,
+[data-theme="dark"] .input-area { background: #141414; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   font-family: var(--font);
@@ -57,7 +89,7 @@ body {
 .sidebar-header .logo-icon {
   width: 34px; height: 34px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #1A6DFF, #4E6EF2);
+  background: var(--text);
   display: flex; align-items: center; justify-content: center;
   color: #fff; font-weight: 700; font-size: 16px;
 }
@@ -75,16 +107,16 @@ body {
 .btn-new-session {
   width: 100%;
   padding: 10px;
-  background: var(--primary);
-  color: #fff;
-  border: none;
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   font-size: 13px;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 6px;
-  transition: background 0.2s;
+  transition: all 0.15s;
 }
-.btn-new-session:hover { background: var(--primary-dark); }
+.btn-new-session:hover { background: var(--bg); color: var(--text); }
 
 .session-list {
   flex: 1;
@@ -102,7 +134,7 @@ body {
   transition: background 0.15s;
 }
 .session-item:hover { background: var(--bg); }
-.session-item.active { background: var(--primary-light); color: var(--primary); font-weight: 500; }
+.session-item.active { background: var(--primary-light); color: var(--text); font-weight: 500; }
 .session-item .title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-item .delete-btn {
   opacity: 0; background: none; border: none; color: var(--text-muted);
@@ -183,16 +215,17 @@ body {
   line-height: 1.7;
   word-break: break-word;
 }
+/* User: light gray bubble, dark text */
 .message-wrapper.user .message-bubble {
-  background: var(--primary);
-  color: #fff;
-  border-bottom-right-radius: 4px;
+  background: #E8E8ED;
+  color: var(--text);
+  border-bottom-right-radius: 6px;
 }
+/* Assistant: white card, faint border, no shadow */
 .message-wrapper.assistant .message-bubble {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-bottom-left-radius: 4px;
-  box-shadow: var(--shadow-sm);
+  border-bottom-left-radius: 6px;
 }
 
 /* Thinking steps */
@@ -263,6 +296,34 @@ body {
 .message-wrapper.assistant .message-bubble h2,
 .message-wrapper.assistant .message-bubble h3 { margin: 12px 0 6px; font-size: 15px; }
 
+/* Copy button on assistant messages */
+.msg-actions {
+  display: flex; gap: 4px; margin-top: 4px; opacity: 0; transition: opacity 0.15s;
+}
+.message-wrapper.assistant:hover .msg-actions { opacity: 1; }
+.btn-copy, .btn-regenerate {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+  cursor: pointer; font-size: 11px; padding: 2px 8px; color: var(--text-secondary);
+  transition: all 0.15s;
+}
+.btn-copy:hover, .btn-regenerate:hover { background: var(--border); color: var(--text); }
+.btn-copy.copied { background: #ECFDF5; color: #059669; border-color: #6EE7B7; }
+[data-theme="dark"] .btn-copy.copied { background: #1A3A1A; }
+.btn-regenerate.loading { opacity: 0.5; pointer-events: none; }
+
+/* Theme toggle */
+.theme-toggle {
+  background: none; border: 1px solid var(--border); border-radius: var(--radius);
+  cursor: pointer; font-size: 14px; padding: 4px 8px; color: var(--text-secondary);
+  transition: all 0.15s; margin-left: 8px;
+}
+.theme-toggle:hover { background: var(--bg); color: var(--text); }
+
+/* Message timestamp */
+.msg-time {
+  font-size: 10px; color: var(--text-muted); margin-top: 2px;
+}
+
 /* Typing cursor */
 .typing-cursor {
   display: inline-block;
@@ -297,21 +358,21 @@ body {
   line-height: 1.5;
   transition: border-color 0.2s;
 }
-.input-row textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,109,255,0.08); }
+.input-row textarea:focus { border-color: var(--border); box-shadow: 0 0 0 3px rgba(0,0,0,0.03); }
 .input-row .btn-send {
   padding: 10px 20px;
-  background: var(--primary);
+  background: var(--text);
   color: #fff;
   border: none;
   border-radius: var(--radius);
   font-size: 14px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.2s;
+  transition: all 0.15s;
   height: 42px;
 }
-.input-row .btn-send:hover { background: var(--primary-dark); }
-.input-row .btn-send:disabled { background: #C9CDD4; cursor: not-allowed; }
+.input-row .btn-send:hover { background: #000; }
+.input-row .btn-send:disabled { background: #D1D1D6; cursor: not-allowed; }
 .input-hint {
   font-size: 11px; color: var(--text-muted); margin-top: 6px;
 }
@@ -353,7 +414,20 @@ body {
   flex-shrink: 0;
 }
 .btn-image:hover { background: var(--border); }
-.btn-image.has-image { background: var(--primary-light); border-color: var(--primary); }
+.btn-image.has-image { background: var(--primary-light); border-color: var(--text-muted); }
+
+.btn-file {
+  width: 42px; height: 42px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.btn-file:hover { background: var(--border); }
+.btn-file.has-file { background: #ECFDF5; border-color: #6EE7B7; }
 
 /* ── Right Sidebar ── */
 .sidebar-right {
@@ -382,7 +456,7 @@ body {
   background: var(--bg); display: flex; align-items: center; justify-content: center;
   font-size: 11px; font-weight: 600; color: var(--text-secondary);
 }
-.pipeline-step .num.active { background: var(--primary); color: #fff; }
+.pipeline-step .num.active { background: var(--text); color: #fff; }
 .tool-item {
   padding: 5px 0; color: var(--text-secondary);
   display: flex; align-items: center; gap: 6px;
@@ -413,9 +487,9 @@ body {
   animation: slideIn 0.3s ease;
   box-shadow: var(--shadow);
 }
-.toast.success { background: var(--success); }
+.toast.success { background: #1B1B1D; }
 .toast.error { background: var(--danger); }
-.toast.info { background: var(--primary); }
+.toast.info { background: #1B1B1D; }
 @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
 /* ── Responsive ── */
@@ -432,32 +506,36 @@ body {
 <body>
 
 <!-- Left Sidebar -->
-<aside class="sidebar-left">
+<aside class="sidebar-left" aria-label="会话列表">
   <div class="sidebar-header">
     <div class="logo">
-      <div class="logo-icon">W</div>
+      <div class="logo-icon" aria-hidden="true">W</div>
       <div>
         <div class="logo-text">WorkMate Agent</div>
       </div>
     </div>
     <div class="auth-status-row">
       <span class="logo-sub" id="loginStatus">默认</span>
-      <a href="#" onclick="doLogout();return false;" style="color:var(--danger);font-size:11px;margin-left:auto;" id="logoutLink" hidden>退出登录</a>
+      <a href="#" onclick="doLogout();return false;" style="color:var(--danger);font-size:11px;margin-left:auto;" id="logoutLink" hidden aria-label="退出登录">退出登录</a>
     </div>
-    <button class="btn-new-session" onclick="newSession()">+ 新建对话</button>
+    <button class="btn-new-session" onclick="newSession()" aria-label="创建新对话">+ 新建对话</button>
   </div>
   <div class="session-list" id="sessionList"></div>
   <div class="sidebar-footer">
     <div class="status-row"><span class="dot on"></span> DeepSeek 已连接</div>
     <div class="status-row" id="kbStatus"><span class="dot off"></span> 知识库加载中...</div>
-    <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">输入 admin/admin 切换管理员<br>输入 hk/hk123456 切换飞书用户</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">输入 用户名/密码 登录（账号见 .env 配置）</div>
+    <div style="margin-top:8px;display:flex;align-items:center;">
+      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="切换深色模式" title="切换深色/浅色模式">🌙</button>
+      <span style="font-size:10px;color:var(--text-muted);margin-left:6px;">深色模式</span>
+    </div>
   </div>
 </aside>
 
 <!-- Main Chat -->
-<main class="chat-container">
+<main class="chat-container" role="main">
   <div class="chat-header" id="chatTitle">新对话</div>
-  <div class="chat-messages" id="chatMessages">
+  <div class="chat-messages" id="chatMessages" role="log" aria-live="polite" aria-label="对话内容">
     <div class="empty-state">
       <div class="icon">💼</div>
       <h3>WorkMate Agent 智能行政助理</h3>
@@ -466,69 +544,167 @@ body {
   </div>
   <div class="input-area">
     <div class="input-row">
-      <input type="file" id="imageInput" accept="image/*" style="display:none;" onchange="handleImageSelect(event)">
-      <button class="btn-image" id="imageBtn" onclick="document.getElementById('imageInput').click()" title="上传图片">🖼</button>
-      <textarea id="userInput" placeholder="输入您的问题，Enter 发送，Shift+Enter 换行..." rows="1" onkeydown="handleKeydown(event)"></textarea>
-      <button class="btn-send" id="sendBtn" onclick="sendMessage()">发送</button>
+      <input type="file" id="imageInput" accept="image/*" style="display:none;" multiple onchange="handleImageSelect(event)" aria-label="选择图片文件">
+          <input type="file" id="docInput" accept=".txt,.pdf,.docx,.xlsx,.md" style="display:none;" multiple onchange="handleDocSelect(event)" aria-label="选择文档文件">
+          <button class="btn-file" id="docBtn" onclick="document.getElementById('docInput').click()" title="上传文档 (PDF/Word/Excel/TXT) — 支持多选" aria-label="上传文档">📄</button>
+          <button class="btn-image" id="imageBtn" onclick="document.getElementById('imageInput').click()" title="上传图片 — 支持多选" aria-label="上传图片">🖼️</button>
+      <textarea id="userInput" placeholder="输入您的问题，Enter 发送，Shift+Enter 换行..." rows="1" onkeydown="handleKeydown(event)" aria-label="输入消息"></textarea>
+      <button class="btn-send" id="sendBtn" onclick="sendMessage()" aria-label="发送消息">发送</button>
     </div>
     <div class="input-hint" style="display:flex;align-items:center;gap:8px;">
-      <span>支持 Markdown · 多轮对话 · 知识库检索 · 工具调用</span>
+      <span id="inputHintText">支持 Markdown · 多轮对话 · 知识库检索 · 工具调用</span>
       <span id="imagePreviewContainer" style="display:none;"></span>
+	      <span id="docPreviewContainer" style="display:none;"></span>
+	      <span id="activeDocIndicator" style="display:none;background:#E8F5E9;color:#2E7D32;padding:2px 8px;border-radius:12px;font-size:11px;align-items:center;gap:4px;"></span>
     </div>
   </div>
 </main>
 
 <!-- Right Sidebar -->
-<aside class="sidebar-right">
+<aside class="sidebar-right" aria-label="Agent 管线面板">
   <div class="section">
     <div class="section-title">Agent 管线</div>
-    <div class="pipeline-step"><span class="num">0</span> 图片识别器</div>
-    <div class="pipeline-step"><span class="num">1</span> 查询重写器</div>
-    <div class="pipeline-step"><span class="num">2</span> 智能路由器</div>
-    <div class="pipeline-step"><span class="num">3</span> 向量检索器</div>
-    <div class="pipeline-step"><span class="num">4</span> 解答生成器</div>
-  </div>
-  <div class="section">
-    <div class="section-title">可用工具</div>
+    <div class="pipeline-step" id="pline-vision"><span class="num">0</span> 🖼️ 图片识别器</div>
+        <div class="pipeline-step" id="pline-document"><span class="num">1</span> 📄 文档读取器</div>
+        <div class="pipeline-step" id="pline-rewrite"><span class="num">2</span> 🔍 查询重写器</div>
+        <div class="pipeline-step" id="pline-route"><span class="num">3</span> 🧭 智能路由器</div>
+        <div class="pipeline-step" id="pline-retrieve"><span class="num">4</span> 📚 向量检索器</div>
+        <div class="pipeline-step" id="pline-solver"><span class="num">5</span> 🤖 解答生成器</div>
+      </div>
+      <div class="section">
+        <div class="section-title">可用工具</div>
     <div class="tool-item"><span class="tool-dot"></span> 天气查询</div>
     <div class="tool-item"><span class="tool-dot"></span> 待办管理</div>
     <div class="tool-item"><span class="tool-dot"></span> 邮件发送</div>
     <div class="tool-item"><span class="tool-dot"></span> 消息通知</div>
+	    <div class="tool-item"><span class="tool-dot"></span> 文件读取</div>
   </div>
   <div class="upload-area-right">
     <div class="section-title">知识库管理</div>
-    <input type="file" id="uploadFile" accept=".txt">
+    <input type="file" id="uploadFile" accept=".txt,.pdf,.docx,.xlsx,.md">
     <button class="btn-upload" id="uploadBtn" onclick="uploadKnowledge()">上传文档建库</button>
     <div class="upload-status" id="uploadStatus"></div>
+    <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+      <div class="section-title" style="margin-bottom:6px;">文件列表</div>
+      <div id="kbFileList" style="max-height:180px;overflow-y:auto;font-size:11px;color:var(--text-secondary);">
+        <span style="color:var(--text-muted);">点击加载...</span>
+      </div>
+      <button class="btn-upload" id="deleteAllKbBtn" onclick="deleteAllKnowledge()" style="margin-top:8px;color:var(--danger);border-color:var(--danger);" title="清空知识库（需管理员权限）">⚠ 清空知识库</button>
+    </div>
   </div>
 </aside>
 
 <script>
-// ── Markdown 渲染器（带 CDN 回退）──
-function renderMarkdown(text) {
-  if (typeof marked !== 'undefined') {
-    return marked.parse(text);
+// ── Sanitize HTML（防 XSS）──
+var SANITIZE_ALLOWED_TAGS = {
+  h1: [], h2: [], h3: [], h4: [], h5: [], h6: [],
+  p: [], br: [], hr: [],
+  strong: [], em: [], b: [], i: [], u: [], s: [], del: [], ins: [], mark: [],
+  code: [], pre: [], blockquote: [],
+  ul: [], ol: [], li: [],
+  table: [], thead: [], tbody: [], tr: [], th: [], td: [],
+  a: ['href', 'title', 'target'],
+  img: ['src', 'alt', 'title', 'width', 'height'],
+  span: [], div: [],
+  sup: [], sub: [], small: [],
+};
+
+function sanitizeHtml(html) {
+  var div = document.createElement('div');
+  div.innerHTML = html;
+  _sanitizeNode(div);
+  return div.innerHTML;
+}
+
+function _sanitizeNode(node) {
+  var remove = [];
+  for (var i = 0; i < node.childNodes.length; i++) {
+    var child = node.childNodes[i];
+    if (child.nodeType === 3) continue; // Text node, safe
+    if (child.nodeType !== 1) { remove.push(child); continue; }
+    var tag = child.tagName.toLowerCase();
+    var allowed = SANITIZE_ALLOWED_TAGS[tag];
+    if (!allowed) {
+      // Replace disallowed element with its text content
+      var text = document.createTextNode(child.textContent || '');
+      node.replaceChild(text, child);
+      i--;
+      continue;
+    }
+    // Remove disallowed attributes
+    var attrs = child.attributes;
+    var removeAttrs = [];
+    for (var a = 0; a < attrs.length; a++) {
+      var attrName = attrs[a].name.toLowerCase();
+      if (attrName.startsWith('on') || allowed.indexOf(attrName) < 0) {
+        removeAttrs.push(attrName);
+      }
+      // Sanitize URLs in href/src
+      if ((attrName === 'href' || attrName === 'src') && allowed.indexOf(attrName) >= 0) {
+        var val = attrs[a].value.trim().toLowerCase();
+        if (val.startsWith('javascript:') || val.startsWith('data:text/html')) {
+          removeAttrs.push(attrName);
+        }
+      }
+    }
+    for (var r = 0; r < removeAttrs.length; r++) {
+      child.removeAttribute(removeAttrs[r]);
+    }
+    // Recurse
+    _sanitizeNode(child);
   }
-  // 内置回退：手动处理常见 Markdown 语法
-  var html = escapeHtml(text);
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
-  html = html.replace(/`([^`\n]+?)`/g, '<code>$1</code>');
-  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-  html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
-  html = html.replace(/\|(.+)\|/g, function(m) {
-    var cells = m.split('|').filter(function(c) { return c.trim(); });
-    return '<tr>' + cells.map(function(c) {
-      return (/^[-:]+$/.test(c.trim())) ? '' : '<td>' + c.trim() + '</td>';
-    }).join('') + '</tr>';
-  });
-  html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
-  html = html.replace(/((?:<tr>.*<\/tr>\n?)+)/g, '<table>$1</table>');
-  html = html.replace(/\n\n/g, '<br><br>');
-  html = html.replace(/\n/g, '<br>');
-  return html;
+  for (var j = 0; j < remove.length; j++) {
+    remove[j].parentNode.removeChild(remove[j]);
+  }
+}
+
+// ── Markdown 渲染器（带 CDN 回退 + XSS 安全过滤）──
+function renderMarkdown(text) {
+  var raw;
+  if (typeof marked !== 'undefined') {
+    // marked.js 渲染后用 sanitizeHtml 清洗
+    raw = marked.parse(text);
+  } else {
+    // 内置回退：手动处理常见 Markdown 语法
+    raw = escapeHtml(text);
+    // 代码块（三反引号）
+    raw = raw.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    // 行内代码
+    raw = raw.replace(/`([^`\n]+?)`/g, '<code>$1</code>');
+    // 图片
+    raw = raw.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
+    // 链接
+    raw = raw.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    // 粗体/斜体
+    raw = raw.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    raw = raw.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    raw = raw.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
+    // 引用
+    raw = raw.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+    // 标题
+    raw = raw.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    raw = raw.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    raw = raw.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    // 水平线
+    raw = raw.replace(/^---$/gm, '<hr>');
+    // 无序列表
+    raw = raw.replace(/^- (.+)$/gm, '<li>$1</li>');
+    // 有序列表
+    raw = raw.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+    // 表格
+    raw = raw.replace(/\|(.+)\|/g, function(m) {
+      var cells = m.split('|').filter(function(c) { return c.trim(); });
+      return '<tr>' + cells.map(function(c) {
+        return (/^[-:]+$/.test(c.trim())) ? '' : '<td>' + c.trim() + '</td>';
+      }).join('') + '</tr>';
+    });
+    raw = raw.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
+    raw = raw.replace(/((?:<tr>.*<\/tr>\n?)+)/g, '<table>$1</table>');
+    raw = raw.replace(/\n\n/g, '<br><br>');
+    raw = raw.replace(/\n/g, '<br>');
+  }
+  // 统一走 XSS 清洗
+  return sanitizeHtml(raw);
 }
 
 // ── State ──
@@ -536,46 +712,145 @@ var currentSessionId = localStorage.getItem("wm_session_id") || crypto.randomUUI
 var sessions = [];
 var isLoading = false;
 var authRole = localStorage.getItem("wm_auth_role") || "";
-var pendingImageUrl = "";
-var pendingImageFile = null;
+// v1.2: 多文件支持 — 对象列表，每个文件独立追踪
+var pendingImages = [];             // [{id, file, url, uploading}]
+var pendingDocs = [];               // [{id, file, filename, originalName, uploading}]
+var activeDocuments = [];           // [{filename, originalName}] 持久化文档
+var MAX_FILES = 5;
+
+// ── Theme Toggle ──
+function initTheme() {
+  var saved = localStorage.getItem("wm_theme");
+  if (saved === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+    document.getElementById("themeToggle").textContent = "☀️";
+  }
+}
+function toggleTheme() {
+  var current = document.documentElement.getAttribute("data-theme");
+  var next = current === "dark" ? "" : "dark";
+  if (next === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+    document.getElementById("themeToggle").textContent = "☀️";
+    localStorage.setItem("wm_theme", "dark");
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+    document.getElementById("themeToggle").textContent = "🌙";
+    localStorage.setItem("wm_theme", "light");
+  }
+}
+
+// ── Copy Message ──
+function copyMessage(btn, content) {
+  navigator.clipboard.writeText(content).then(function() {
+    btn.classList.add("copied");
+    btn.textContent = "✓ 已复制";
+    setTimeout(function() {
+      btn.classList.remove("copied");
+      btn.textContent = "📋 复制";
+    }, 2000);
+  }).catch(function() {
+    // Fallback for older browsers
+    var textarea = document.createElement("textarea");
+    textarea.value = content;
+    textarea.style.position = "fixed"; textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    try { document.execCommand("copy"); btn.classList.add("copied"); btn.textContent = "✓ 已复制"; } catch(e) {}
+    document.body.removeChild(textarea);
+    setTimeout(function() { btn.classList.remove("copied"); btn.textContent = "📋 复制"; }, 2000);
+  });
+}
+
+// ── Regenerate Message ──
+function regenerateMessage(assistantId) {
+  var wrapper = document.getElementById(assistantId);
+  if (!wrapper || isLoading) return;
+  // Remove this assistant message and re-send last user question
+  var container = document.getElementById("chatMessages");
+  var prevUser = wrapper.previousElementSibling;
+  if (!prevUser || !prevUser.classList.contains("user")) return;
+  var userText = (prevUser.querySelector(".message-bubble") || {}).textContent || "";
+  // Remove both
+  wrapper.remove();
+  prevUser.remove();
+  // Restore input and send
+  var input = document.getElementById("userInput");
+  input.value = userText;
+  sendMessage();
+}
+
+// ── Pipeline Panel Update (right sidebar) ──
+function updatePipelinePanel(stepId, status) {
+  var el = document.getElementById("pline-" + stepId);
+  if (!el) return;
+  var numEl = el.querySelector(".num");
+  if (!numEl) return;
+  numEl.className = "num";
+  if (status === "running") {
+    numEl.classList.add("active");
+    numEl.style.animation = "pulse 1s infinite";
+  } else if (status === "done") {
+    numEl.style.background = "#00B42A";
+    numEl.style.color = "#fff";
+    numEl.style.animation = "";
+  }
+}
+function resetPipelinePanel() {
+  var steps = ["vision", "document", "rewrite", "route", "retrieve", "solver"];
+  for (var i = 0; i < steps.length; i++) {
+    var el = document.getElementById("pline-" + steps[i]);
+    if (!el) continue;
+    var numEl = el.querySelector(".num");
+    if (!numEl) continue;
+    numEl.className = "num";
+    numEl.style.background = "";
+    numEl.style.color = "";
+    numEl.style.animation = "";
+  }
+}
 
 // ── Init ──
 document.addEventListener("DOMContentLoaded", function() {
+  initTheme();
   localStorage.setItem("wm_session_id", currentSessionId);
   if (authRole) { updateAuthUI(authRole); }
   loadSessions();
   loadSessionHistory(currentSessionId);
   checkStatus();
+  loadKbFiles();
   autoResizeTextarea();
 });
 
-// ── Auth (在聊天框输入 admin/admin 或 hk/hk123456 切换) ──
-var AUTH_MAGIC = {
-  "admin/admin": { username: "admin", password: "admin", role: "admin", label: "管理员" },
-  "hk/hk123456": { username: "hk", password: "hk123456", role: "feishu_user", label: "飞书用户" },
-};
+// ── Auth (在聊天框输入 用户名/密码 登录，如 admin/admin) ──
+// 账号密码由后端校验，前端不保存任何真实密码
+var ROLE_LABELS = { admin: "管理员", feishu_user: "飞书用户" };
 
 function tryAuth(text) {
-  var match = AUTH_MAGIC[text.trim()];
-  if (!match) return false;
+  var trimmed = text.trim();
+  var sep = trimmed.indexOf("/");
+  if (sep <= 0 || sep === trimmed.length - 1) return false;
+  var username = trimmed.slice(0, sep);
+  var password = trimmed.slice(sep + 1);
   fetch("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: match.username, password: match.password })
+    body: JSON.stringify({ username: username, password: password })
   }).then(function(res) {
     if (!res.ok) return res.json().then(function(e) { throw new Error(e.detail || "登录失败"); });
     return res.json();
   }).then(function(data) {
     authRole = data.role;
+    var label = ROLE_LABELS[data.role] || data.role;
     localStorage.setItem("wm_auth_role", authRole);
     updateAuthUI(authRole);
     // 切换账号时清空当前页面
     currentSessionId = crypto.randomUUID();
     localStorage.setItem("wm_session_id", currentSessionId);
-    document.getElementById("chatMessages").innerHTML = '<div class="empty-state"><div class="icon">💼</div><h3>WorkMate Agent 智能行政助理</h3><p>已切换为 ' + match.label + '。<br>请输入您的问题开始对话。</p></div>';
+    document.getElementById("chatMessages").innerHTML = '<div class="empty-state"><div class="icon">💼</div><h3>WorkMate Agent 智能行政助理</h3><p>已切换为 ' + label + '。<br>请输入您的问题开始对话。</p></div>';
     document.getElementById("chatTitle").textContent = "新对话";
     loadSessions();
-    showToast("已切换为 " + match.label, "success");
+    showToast("已切换为 " + label, "success");
   }).catch(function(e) { showToast(e.message, "error"); });
   return true;
 }
@@ -723,7 +998,7 @@ function checkStatus() {
   }).catch(function(e) { console.error("Status check failed:", e); });
 }
 
-// ── Knowledge Upload ──
+// ── Knowledge Upload (async with status polling) ──
 function uploadKnowledge() {
   var fileInput = document.getElementById("uploadFile");
   var file = fileInput.files[0];
@@ -737,180 +1012,595 @@ function uploadKnowledge() {
 
   var formData = new FormData();
   formData.append("file", file);
-  fetch("/api/upload", { method: "POST", body: formData }).then(function(res) {
+
+  // 使用异步上传接口，立即返回任务 ID
+  fetch("/api/upload-async", { method: "POST", body: formData }).then(function(res) {
     if (!res.ok) { return res.json().then(function(err) { throw new Error(err.detail || "上传失败"); }); }
     return res.json();
   }).then(function(data) {
-    status.textContent = "已建库 (" + data.chunks + " 块)";
-    showToast("知识库已就绪，共 " + data.chunks + " 个文本块", "success");
-    checkStatus();
+    if (data.task_id) {
+      // 异步模式：轮询任务状态
+      status.textContent = "处理中...";
+      pollTaskStatus(data.task_id, btn, status);
+    } else {
+      // 同步模式（兼容旧接口）
+      status.textContent = "已建库 (" + data.chunks + " 块)";
+      showToast("知识库已就绪，共 " + data.chunks + " 个文本块", "success");
+      checkStatus();
+      loadKbFiles();
+      btn.disabled = false;
+      btn.textContent = "上传文档建库";
+    }
   }).catch(function(e) {
     status.textContent = "上传失败";
     showToast(e.message, "error");
-  }).finally(function() {
     btn.disabled = false;
     btn.textContent = "上传文档建库";
   });
 }
 
-// ── Image upload handling ──
-function handleImageSelect(event) {
-  var file = event.target.files[0];
-  if (!file) return;
+function pollTaskStatus(taskId, btn, statusEl) {
+  var pollCount = 0;
+  var maxPolls = 60; // 最多轮询 60 次 (60 秒)
 
-  pendingImageFile = file;
-  pendingImageUrl = "";
+  function poll() {
+    pollCount++;
+    fetch("/api/task/" + encodeURIComponent(taskId)).then(function(res) {
+      if (!res.ok) throw new Error("状态查询失败");
+      return res.json();
+    }).then(function(task) {
+      statusEl.textContent = task.progress || task.status;
 
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var container = document.getElementById("imagePreviewContainer");
-    container.style.display = "inline-block";
-    container.innerHTML = '<span class="image-preview-wrapper"><img src="' + e.target.result + '" alt="preview"><button class="remove-img" onclick="removeImage()">&times;</button></span>';
-  };
-  reader.readAsDataURL(file);
+      if (task.status === "done") {
+        var result = task.result || {};
+        var chunks = result.chunks || 0;
+        statusEl.textContent = "已建库 (" + chunks + " 块)";
+        showToast("知识库已就绪，共 " + chunks + " 个文本块", "success");
+        checkStatus();
+        loadKbFiles();
+        btn.disabled = false;
+        btn.textContent = "上传文档建库";
+        document.getElementById("uploadFile").value = "";
+      } else if (task.status === "error") {
+        var errMsg = (task.result && task.result.error) || "处理失败";
+        statusEl.textContent = "处理失败";
+        showToast(errMsg, "error");
+        btn.disabled = false;
+        btn.textContent = "上传文档建库";
+      } else if (pollCount >= maxPolls) {
+        statusEl.textContent = "处理超时";
+        showToast("文档处理超时，请稍后查看知识库状态", "info");
+        btn.disabled = false;
+        btn.textContent = "上传文档建库";
+        checkStatus();
+        loadKbFiles();
+      } else {
+        // 继续轮询
+        setTimeout(poll, 1500); // 每 1.5 秒轮询一次
+      }
+    }).catch(function(e) {
+      statusEl.textContent = "状态查询失败";
+      showToast("无法获取处理状态: " + e.message, "error");
+      btn.disabled = false;
+      btn.textContent = "上传文档建库";
+    });
+  }
 
-  var btn = document.getElementById("imageBtn");
-  btn.classList.add("has-image");
-  btn.textContent = "✓";
+  // 首次轮询延迟 1 秒，给后端启动时间
+  setTimeout(poll, 1000);
 }
 
-function removeImage() {
-  pendingImageFile = null;
-  pendingImageUrl = "";
+// ── Knowledge Base Management ──
+function loadKbFiles() {
+  fetch("/api/knowledge").then(function(res) { return res.json(); }).then(function(data) {
+    var list = document.getElementById("kbFileList");
+    if (!data.files || data.files.length === 0) {
+      list.innerHTML = '<span style="color:var(--text-muted);">暂无文件</span>';
+    } else {
+      list.innerHTML = '<div style="margin-bottom:4px;color:var(--text-muted);">' + data.file_count + ' 个文件 · ' + (data.chunks || 0) + ' 块</div>'
+        + data.files.map(function(f) {
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;">'
+            + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;" title="' + escapeHtml(f.name) + '">📄 ' + escapeHtml(f.name) + ' <span style="color:var(--text-muted);">(' + (f.size_display || '') + ')</span></span>'
+            + '<button class="kb-delete-btn" data-filename="' + escapeHtml(f.name) + '" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;padding:0 4px;" title="删除此文件" aria-label="删除 ' + escapeHtml(f.name) + '">&times;</button>'
+            + '</div>';
+        }).join("");
+    }
+    document.getElementById("kbStatus").innerHTML = data.ready
+      ? '<span class="dot on"></span> 知识库已就绪 (' + (data.chunks || 0) + '块)'
+      : '<span class="dot off"></span> 知识库未建库';
+    // 事件委托：绑定删除按钮
+    _bindKbDeleteButtons();
+  }).catch(function(e) {
+    document.getElementById("kbFileList").innerHTML = '<span style="color:var(--danger);">加载失败</span>';
+  });
+}
+
+function _bindKbDeleteButtons() {
+  var buttons = document.querySelectorAll("#kbFileList .kb-delete-btn");
+  for (var i = 0; i < buttons.length; i++) {
+    buttons[i].onclick = function() {
+      var filename = this.getAttribute("data-filename");
+      deleteKnowledgeFile(filename);
+    };
+  }
+}
+
+function deleteKnowledgeFile(filename) {
+  if (!confirm("确定要删除文件「" + filename + "」吗？\n删除后知识库将自动重建索引。")) return;
+
+  fetch("/api/knowledge/files/" + encodeURIComponent(filename), { method: "DELETE" }).then(function(res) {
+    if (!res.ok) return res.json().then(function(e) { throw new Error(e.detail || "删除失败"); });
+    return res.json();
+  }).then(function(data) {
+    showToast("已删除 " + filename + "，知识库已重建 (" + (data.chunks || 0) + " 块)", "success");
+    loadKbFiles();
+  }).catch(function(e) { showToast(e.message, "error"); });
+}
+
+function deleteAllKnowledge() {
+  if (!confirm("⚠️ 确定要清空整个知识库吗？\n\n这将删除：\n- 所有上传的知识库文件\n- 向量索引数据\n\n此操作不可恢复！")) return;
+
+  fetch("/api/knowledge", { method: "DELETE" }).then(function(res) {
+    if (!res.ok) return res.json().then(function(e) { throw new Error(e.detail || "删除失败"); });
+    return res.json();
+  }).then(function(data) {
+    showToast("知识库已清空（" + (data.details ? data.details.files_removed : 0) + " 个文件）", "success");
+    loadKbFiles();
+    checkStatus();
+  }).catch(function(e) { showToast(e.message, "error"); });
+}
+
+// ── Image upload handling（v1.2: 对象列表，健壮的多文件支持）──
+var _imgIdCounter = 0;
+var pendingImages = [];  // [{id, file, url, uploading}]
+
+function handleImageSelect(event) {
+  var files = Array.from(event.target.files || []);
+  if (files.length === 0) return;
+
+  if (pendingImages.length + files.length > MAX_FILES) {
+    showToast("最多同时上传 " + MAX_FILES + " 张图片（当前已有 " + pendingImages.length + " 张）", "info");
+    files = files.slice(0, MAX_FILES - pendingImages.length);
+    if (files.length === 0) { event.target.value = ""; return; }
+  }
+
+  var container = document.getElementById("imagePreviewContainer");
+  container.style.display = "flex";
+  container.style.flexWrap = "wrap";
+  container.style.gap = "6px";
+
+  for (var f = 0; f < files.length; f++) {
+    var entry = { id: _imgIdCounter++, file: files[f], url: "", uploading: true };
+    pendingImages.push(entry);
+
+    var div = document.createElement("span");
+    div.className = "image-preview-wrapper";
+    div.id = "img-" + entry.id;
+    div.innerHTML = '<span style="display:inline-block;padding:4px 8px;background:#F2F3F5;border-radius:6px;font-size:12px;">🖼️ ' + escapeHtml(files[f].name) + ' ⏳</span>';
+    container.appendChild(div);
+
+    _startImageUpload(entry);
+  }
+
+  _refreshImageBtn();
+  updateInputHint();
+  event.target.value = "";
+}
+
+function _startImageUpload(entry) {
+  var fd = new FormData();
+  fd.append("file", entry.file);
+  var el = document.getElementById("img-" + entry.id);
+
+  fetch("/api/upload-image", { method: "POST", body: fd })
+    .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || "上传失败"); }); return r.json(); })
+    .then(function(data) {
+      entry.url = data.url;
+      entry.uploading = false;
+      if (el) el.innerHTML = '<img src="' + data.url + '" alt="preview"><button class="remove-img" onclick="_removeImage(' + entry.id + ')">&times;</button>';
+      _refreshImageBtn();
+      updateInputHint();
+    })
+    .catch(function(e) {
+      entry.url = "";
+      entry.uploading = false;
+      if (el) el.innerHTML = '<span style="display:inline-block;padding:4px 8px;background:#FFF3E8;border-radius:6px;font-size:12px;color:var(--danger);">⚠️ ' + escapeHtml(entry.file.name) + '</span>';
+      _refreshImageBtn();
+      updateInputHint();
+    });
+}
+
+function _removeImage(id) {
+  pendingImages = pendingImages.filter(function(e) { return e.id !== id; });
+  var el = document.getElementById("img-" + id);
+  if (el) el.remove();
+  if (pendingImages.length === 0) {
+    document.getElementById("imagePreviewContainer").style.display = "none";
+  }
+  _refreshImageBtn();
+  updateInputHint();
+}
+
+function _refreshImageBtn() {
+  var btn = document.getElementById("imageBtn");
+  var ready = pendingImages.filter(function(e) { return e.url; });
+  var uploading = pendingImages.filter(function(e) { return e.uploading; });
+  if (uploading.length > 0) {
+    btn.classList.add("has-image");
+    btn.textContent = pendingImages.length + "⏳";
+  } else if (ready.length > 0) {
+    btn.classList.add("has-image");
+    btn.textContent = ready.length + "✓";
+  } else if (pendingImages.length > 0) {
+    btn.classList.add("has-image");
+    btn.textContent = pendingImages.length + "⚠️";
+  } else {
+    btn.classList.remove("has-image");
+    btn.textContent = "🖼️";
+  }
+}
+
+function removeAllImages() {
+  pendingImages = [];
   document.getElementById("imagePreviewContainer").style.display = "none";
   document.getElementById("imagePreviewContainer").innerHTML = "";
   document.getElementById("imageInput").value = "";
   var btn = document.getElementById("imageBtn");
   btn.classList.remove("has-image");
-  btn.textContent = "🖼";
+  btn.textContent = "🖼️";
+  updateInputHint();
 }
 
-async function uploadPendingImage() {
-  if (!pendingImageFile) return "";
-  if (pendingImageUrl) return pendingImageUrl;
+// ── Document upload handling（v1.2: 对象列表，健壮的多文件支持）──
+var _docIdCounter = 0;
+var pendingDocs = [];  // [{id, file, filename, originalName, uploading}]
 
-  var formData = new FormData();
-  formData.append("file", pendingImageFile);
-  try {
-    var resp = await fetch("/api/upload-image", { method: "POST", body: formData });
-    if (!resp.ok) {
-      var err = await resp.json();
-      throw new Error(err.detail || "图片上传失败");
-    }
-    var data = await resp.json();
-    pendingImageUrl = data.url;
-    return data.url;
-  } catch (e) {
-    showToast("图片上传失败: " + e.message, "error");
-    return "";
+function handleDocSelect(event) {
+  var files = Array.from(event.target.files || []);
+  if (files.length === 0) return;
+
+  if (pendingDocs.length + files.length > MAX_FILES) {
+    showToast("最多同时上传 " + MAX_FILES + " 个文档（当前已有 " + pendingDocs.length + " 个）", "info");
+    files = files.slice(0, MAX_FILES - pendingDocs.length);
+    if (files.length === 0) { event.target.value = ""; return; }
+  }
+
+  var container = document.getElementById("docPreviewContainer");
+  container.style.display = "flex";
+  container.style.flexWrap = "wrap";
+  container.style.gap = "6px";
+
+  for (var f = 0; f < files.length; f++) {
+    var entry = { id: _docIdCounter++, file: files[f], filename: "", originalName: files[f].name, uploading: true };
+    pendingDocs.push(entry);
+
+    var icon = files[f].name.endsWith(".pdf") ? "📕" : files[f].name.endsWith(".docx") ? "📘" : files[f].name.endsWith(".xlsx") ? "📗" : "📄";
+    var div = document.createElement("span");
+    div.className = "image-preview-wrapper";
+    div.id = "doc-" + entry.id;
+    div.style.background = "#F2F3F5";
+    div.style.borderColor = "var(--border)";
+    div.innerHTML = '<span style="display:inline-block;padding:4px 8px;border-radius:6px;font-size:12px;">' + icon + ' ' + escapeHtml(files[f].name) + ' ⏳</span><button class="remove-img" onclick="_removeDoc(' + entry.id + ')">&times;</button>';
+    container.appendChild(div);
+
+    _startDocUpload(entry);
+  }
+
+  _refreshDocBtn();
+  updateInputHint();
+  event.target.value = "";
+}
+
+function _startDocUpload(entry) {
+  var fd = new FormData();
+  fd.append("file", entry.file);
+  var el = document.getElementById("doc-" + entry.id);
+
+  fetch("/api/upload-document", { method: "POST", body: fd })
+    .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || "上传失败"); }); return r.json(); })
+    .then(function(data) {
+      entry.filename = data.filename;
+      entry.originalName = data.original_name || entry.file.name;
+      entry.uploading = false;
+      // 自动加入持久化文档列表
+      if (!activeDocuments.some(function(d) { return d.filename === data.filename; })) {
+        activeDocuments.push({ filename: data.filename, originalName: entry.originalName });
+      }
+      var icon = entry.file.name.endsWith(".pdf") ? "📕" : entry.file.name.endsWith(".docx") ? "📘" : entry.file.name.endsWith(".xlsx") ? "📗" : "📄";
+      if (el) {
+        el.style.background = "#E8F5E9";
+        el.style.borderColor = "#4CAF50";
+        el.innerHTML = '<span style="display:inline-block;padding:4px 8px;border-radius:6px;font-size:12px;">' + icon + ' ' + escapeHtml(entry.file.name) + ' ✅</span><button class="remove-img" onclick="_removeDoc(' + entry.id + ')">&times;</button>';
+      }
+      _refreshDocBtn();
+      updateActiveDocIndicators();
+      updateInputHint();
+    })
+    .catch(function(e) {
+      entry.filename = "";
+      entry.uploading = false;
+      if (el) {
+        el.style.background = "#FFF3E8";
+        el.style.borderColor = "var(--danger)";
+        el.innerHTML = '<span style="display:inline-block;padding:4px 8px;border-radius:6px;font-size:12px;color:var(--danger);">⚠️ ' + escapeHtml(entry.file.name) + '</span><button class="remove-img" onclick="_removeDoc(' + entry.id + ')">&times;</button>';
+      }
+      _refreshDocBtn();
+      updateInputHint();
+    });
+}
+
+function _removeDoc(id) {
+  var entry = pendingDocs.find(function(e) { return e.id === id; });
+  if (entry && entry.filename) {
+    activeDocuments = activeDocuments.filter(function(d) { return d.filename !== entry.filename; });
+  }
+  pendingDocs = pendingDocs.filter(function(e) { return e.id !== id; });
+  var el = document.getElementById("doc-" + id);
+  if (el) el.remove();
+  if (pendingDocs.length === 0) {
+    document.getElementById("docPreviewContainer").style.display = "none";
+  }
+  _refreshDocBtn();
+  updateActiveDocIndicators();
+  updateInputHint();
+}
+
+function _refreshDocBtn() {
+  var btn = document.getElementById("docBtn");
+  var ready = pendingDocs.filter(function(e) { return e.filename; });
+  var uploading = pendingDocs.filter(function(e) { return e.uploading; });
+  if (uploading.length > 0) {
+    btn.classList.add("has-file");
+    btn.textContent = pendingDocs.length + "⏳";
+  } else if (ready.length > 0) {
+    btn.classList.add("has-file");
+    btn.textContent = ready.length + "✓";
+  } else if (pendingDocs.length > 0) {
+    btn.classList.add("has-file");
+    btn.textContent = pendingDocs.length + "⚠️";
+  } else {
+    btn.classList.remove("has-file");
+    btn.textContent = "📄";
   }
 }
 
-// ── Send Message (streaming) ──
+function removeAllDocuments() {
+  pendingDocs = [];
+  document.getElementById("docPreviewContainer").style.display = "none";
+  document.getElementById("docPreviewContainer").innerHTML = "";
+  document.getElementById("docInput").value = "";
+  var btn = document.getElementById("docBtn");
+  btn.classList.remove("has-file");
+  btn.textContent = "📄";
+  updateInputHint();
+}
+
+function clearActiveDocument(filename) {
+  activeDocuments = activeDocuments.filter(function(d) { return d.filename !== filename; });
+  updateActiveDocIndicators();
+  updateInputHint();
+  showToast("已取消附加文档，后续对话将不再参考该文件", "info");
+}
+
+function clearAllActiveDocuments() {
+  activeDocuments = [];
+  updateActiveDocIndicators();
+  updateInputHint();
+  showToast("已取消所有附加文档", "info");
+}
+
+// ── v1.2: 根据附加文件类型动态调整输入框提示 ──
+function updateInputHint() {
+  var textarea = document.getElementById("userInput");
+  var hintEl = document.getElementById("inputHintText");
+  if (!textarea) return;
+
+  var imgReady = pendingImages.filter(function(e) { return e.url; }).length;
+  var imgPending = pendingImages.filter(function(e) { return e.uploading; }).length;
+  var docReady = pendingDocs.filter(function(e) { return e.filename; }).length + activeDocuments.length;
+  var docPending = pendingDocs.filter(function(e) { return e.uploading; }).length;
+
+  if (imgReady > 0 && docReady > 0) {
+    textarea.placeholder = "输入关于 " + imgReady + " 张图片和 " + docReady + " 个文档的问题…Enter 发送";
+  } else if (imgReady > 0) {
+    textarea.placeholder = "输入关于 " + imgReady + " 张图片的问题…Enter 发送";
+  } else if (docReady > 0) {
+    textarea.placeholder = "输入关于 " + docReady + " 个文档的问题…Enter 发送";
+  } else if (imgPending > 0 || docPending > 0) {
+    textarea.placeholder = "文件上传中…请稍候再输入";
+  } else {
+    textarea.placeholder = "输入您的问题，Enter 发送，Shift+Enter 换行…";
+  }
+
+  if (hintEl) {
+    if (imgReady > 0 && docReady > 0) {
+      hintEl.textContent = "🖼️ " + imgReady + "图 + 📄 " + docReady + "文档已附加";
+    } else if (imgReady > 0) {
+      hintEl.textContent = "🖼️ " + imgReady + " 张图片已附加";
+    } else if (docReady > 0) {
+      hintEl.textContent = "📄 " + docReady + " 个文档已附加";
+    } else if (imgPending > 0 || docPending > 0) {
+      hintEl.textContent = "⏳ 文件上传中…";
+    } else {
+      hintEl.textContent = "支持 Markdown · 多轮对话 · 知识库检索 · 工具调用";
+    }
+  }
+}
+
+function updateActiveDocIndicators() {
+  var el = document.getElementById("activeDocIndicator");
+  if (!el) return;
+  if (activeDocuments.length > 0) {
+    el.style.display = "inline-flex";
+    el.style.flexWrap = "wrap";
+    el.style.gap = "4px";
+    var html = "";
+    for (var i = 0; i < activeDocuments.length; i++) {
+      var d = activeDocuments[i];
+      html += '<span style="background:#E8F5E9;color:#2E7D32;padding:2px 6px;border-radius:12px;font-size:11px;display:inline-flex;align-items:center;gap:4px;">📄 ' + escapeHtml(d.originalName || d.filename) + ' <button onclick="clearActiveDocument(\'' + escapeHtml(d.filename) + '\')" style="background:none;border:none;color:#C62828;cursor:pointer;font-size:14px;padding:0 2px;line-height:1;" title="取消附加">&times;</button></span>';
+    }
+    if (activeDocuments.length > 1) {
+      html += ' <button onclick="clearAllActiveDocuments()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:11px;padding:2px 6px;" title="全部取消">全部取消</button>';
+    }
+    el.innerHTML = html;
+  } else {
+    el.style.display = "none";
+    el.innerHTML = "";
+  }
+}
+
+
+// ── Send Message (streaming) v1.2 multi-file ──
 async function sendMessage() {
   if (isLoading) return;
 
   var input = document.getElementById("userInput");
   var question = input.value.trim();
-  if (!question && !pendingImageFile) return;
 
-  // 认证拦截：admin/admin 或 hk/hk123456
+  // 从对象列表提取就绪的 URL/filename
+  var imgReady = pendingImages.filter(function(e) { return e.url; });
+  var docReady = pendingDocs.filter(function(e) { return e.filename; });
+  var hasFile = pendingImages.length > 0 || pendingDocs.length > 0 || activeDocuments.length > 0;
+  var hasReady = imgReady.length > 0 || docReady.length > 0 || activeDocuments.length > 0;
+
+  // 检查是否有文件正在上传中（阻止发送，避免文件遗漏）
+  var uploadingCount = pendingImages.filter(function(e) { return e.uploading; }).length
+                     + pendingDocs.filter(function(e) { return e.uploading; }).length;
+  if (uploadingCount > 0) {
+    showToast("文件还在上传中，请稍候…", "info");
+    input.value = question;
+    input.focus();
+    return;
+  }
+
+  if (!question && !hasReady) {
+    return;
+  }
+
+  if (!question && hasReady) {
+    showToast("请在聊天框输入关于这些文件的问题后再发送", "info");
+    input.focus();
+    return;
+  }
+
   if (tryAuth(question)) {
     input.value = "";
     input.style.height = "auto";
     return;
   }
 
-  // 上传待发送的图片
-  if (pendingImageFile && !pendingImageUrl) {
-    var uploaded = await uploadPendingImage();
-    if (!uploaded) {
-      showToast("图片上传失败，请重试", "error");
-      return;
-    }
-  }
-
+  // ── 清除输入并显示用户消息 ──
   input.value = "";
   input.style.height = "auto";
-
   var empty = document.querySelector(".empty-state");
   if (empty) empty.remove();
 
-  // 显示用户消息（如有图片则附带缩略图）
-  var userMsgContent = question;
-  if (pendingImageFile && pendingImageUrl) {
-    userMsgContent = question + ' <br><img src="' + pendingImageUrl + '" style="max-height:100px;border-radius:6px;margin-top:4px;">';
-  }
   addMessage("user", question);
-  if (pendingImageUrl) {
-    // 在用户消息旁显示图片
+  // 图片缩略图预览
+  var imgUrls = imgReady.map(function(e) { return e.url; });
+  if (imgUrls.length > 0) {
     var userBubbles = document.querySelectorAll(".message-wrapper.user .message-bubble");
     var lastBubble = userBubbles[userBubbles.length - 1];
     if (lastBubble) {
-      var imgEl = document.createElement("img");
-      imgEl.src = pendingImageUrl;
-      imgEl.style.cssText = "max-height:100px;border-radius:6px;margin-top:4px;display:block;";
-      lastBubble.appendChild(imgEl);
+      for (var i = 0; i < Math.min(imgUrls.length, 3); i++) {
+        var imgEl = document.createElement("img");
+        imgEl.src = imgUrls[i];
+        imgEl.style.cssText = "max-height:100px;border-radius:6px;margin-top:4px;margin-right:4px;display:inline-block;";
+        lastBubble.appendChild(imgEl);
+      }
+      if (imgUrls.length > 3) {
+        var more = document.createElement("span");
+        more.textContent = "+" + (imgUrls.length - 3) + " 张";
+        more.style.cssText = "font-size:11px;color:var(--text-muted);";
+        lastBubble.appendChild(more);
+      }
     }
   }
 
+  // ── 创建助手容器 ──
   var assistantId = "assistant-" + Date.now();
-  var msgContainer = addAssistantContainer(assistantId);
-
+  addAssistantContainer(assistantId);
+  resetPipelinePanel();
   isLoading = true;
   document.getElementById("sendBtn").disabled = true;
 
   var thinkingBody = document.querySelector("#" + assistantId + " .thinking-body");
   var answerEl = document.querySelector("#" + assistantId + " .answer-content");
 
-  var hasImage = !!pendingImageUrl;
   var steps = [];
-  if (hasImage) {
-    steps.push({ id: "vision", label: "图片识别器", icon: "0", status: "pending" });
+  if (imgReady.length > 0) {
+    steps.push({ id: "vision", label: "图片识别器 (" + imgReady.length + "张)", icon: "0", status: "pending" });
+  }
+  // 去重：pendingDocs 和 activeDocuments 可能有重叠
+  var docTotal = docReady.length;
+  for (var d = 0; d < activeDocuments.length; d++) {
+    if (!docReady.some(function(pd) { return pd.filename === activeDocuments[d].filename; })) {
+      docTotal++;
+    }
+  }
+  if (docTotal > 0) {
+    steps.push({ id: "document", label: "文档读取器 (" + docTotal + "个)", icon: "1", status: "pending" });
   }
   steps.push(
-    { id: "rewrite", label: "查询重写器", icon: "1", status: "pending" },
-    { id: "route", label: "智能路由器", icon: "2", status: "pending" },
-    { id: "retrieve", label: "向量检索器", icon: "3", status: "pending" },
-    { id: "solver", label: "解答生成器", icon: "4", status: "pending" }
+    { id: "rewrite", label: "查询重写器", icon: "2", status: "pending" },
+    { id: "route", label: "智能路由器", icon: "3", status: "pending" },
+    { id: "retrieve", label: "向量检索器", icon: "4", status: "pending" },
+    { id: "solver", label: "解答生成器", icon: "5", status: "pending" }
   );
   renderThinkingSteps(thinkingBody, steps);
 
-  // 用变量追踪原始 Markdown 文本，不依赖 DOM 读取
   var rawMarkdown = "";
 
+  // ── 构建流式 URL ──
   var streamUrl = "/api/ask/stream?question=" + encodeURIComponent(question) + "&session_id=" + encodeURIComponent(currentSessionId);
-  if (hasImage) {
-    streamUrl += "&image_url=" + encodeURIComponent(pendingImageUrl);
+  if (imgUrls.length > 0) {
+    streamUrl += "&image_urls=" + encodeURIComponent(imgUrls.join(","));
+    streamUrl += "&image_url=" + encodeURIComponent(imgUrls[0]);
   }
+  var allDocFilenames = docReady.map(function(e) { return e.filename; });
+  for (var d = 0; d < activeDocuments.length; d++) {
+    if (allDocFilenames.indexOf(activeDocuments[d].filename) < 0) {
+      allDocFilenames.push(activeDocuments[d].filename);
+    }
+  }
+  if (allDocFilenames.length > 0) {
+    streamUrl += "&document_filenames=" + encodeURIComponent(allDocFilenames.join(","));
+    streamUrl += "&document_filename=" + encodeURIComponent(allDocFilenames[0]);
+  }
+
   var eventSource = new EventSource(streamUrl);
 
   eventSource.addEventListener("step", function(e) {
     var data = JSON.parse(e.data);
+    var sid = data.step;
     if (data.step === "vision") {
-      if (data.status === "running") updateStep(thinkingBody, steps, "vision", "running");
-      else updateStep(thinkingBody, steps, "vision", "done", data.status === "failed" ? "识别失败" : "图片内容已提取");
+      if (data.status === "running") { updateStep(thinkingBody, steps, "vision", "running"); updatePipelinePanel("vision", "running"); }
+      else { updateStep(thinkingBody, steps, "vision", "done", data.status === "failed" ? "识别失败" : "图片内容已提取"); updatePipelinePanel("vision", "done"); }
+    } else if (data.step === "document") {
+      if (data.status === "running") { updateStep(thinkingBody, steps, "document", "running"); updatePipelinePanel("document", "running"); }
+      else { updateStep(thinkingBody, steps, "document", "done"); updatePipelinePanel("document", "done"); }
     } else if (data.step === "rewrite") {
-      if (data.status === "running") updateStep(thinkingBody, steps, "rewrite", "running");
-      else updateStep(thinkingBody, steps, "rewrite", "done", data.query);
+      if (data.status === "running") { updateStep(thinkingBody, steps, "rewrite", "running"); updatePipelinePanel("rewrite", "running"); }
+      else { updateStep(thinkingBody, steps, "rewrite", "done", data.query); updatePipelinePanel("rewrite", "done"); }
     } else if (data.step === "route") {
-      if (data.status === "running") updateStep(thinkingBody, steps, "route", "running");
+      if (data.status === "running") { updateStep(thinkingBody, steps, "route", "running"); updatePipelinePanel("route", "running"); }
       else {
         var labels = { rag: "知识检索", tool: "工具调用", chat: "直接对话" };
         updateStep(thinkingBody, steps, "route", "done", labels[data.decision] || data.decision);
+        updatePipelinePanel("route", "done");
       }
     } else if (data.step === "retrieve") {
-      if (data.status === "running") updateStep(thinkingBody, steps, "retrieve", "running");
-      else updateStep(thinkingBody, steps, "retrieve", "done", "检索到 " + (data.count || 0) + " 篇文档");
+      if (data.status === "running") { updateStep(thinkingBody, steps, "retrieve", "running"); updatePipelinePanel("retrieve", "running"); }
+      else { updateStep(thinkingBody, steps, "retrieve", "done", "检索到 " + (data.count || 0) + " 篇文档"); updatePipelinePanel("retrieve", "done"); }
     } else if (data.step === "solver") {
       updateStep(thinkingBody, steps, "solver", "running");
+      updatePipelinePanel("solver", "running");
     }
   });
 
   eventSource.addEventListener("token", function(e) {
     var data = JSON.parse(e.data);
     rawMarkdown += data.content;
-    // 移除光标 → 渲染 → 恢复光标
     removeTypingCursor(answerEl);
     answerEl.innerHTML = renderMarkdown(rawMarkdown);
     answerEl.innerHTML += '<span class="typing-cursor"></span>';
@@ -919,13 +1609,20 @@ async function sendMessage() {
 
   eventSource.addEventListener("done", function(e) {
     updateStep(thinkingBody, steps, "solver", "done");
+    updatePipelinePanel("solver", "done");
     eventSource.close();
     isLoading = false;
     document.getElementById("sendBtn").disabled = false;
     document.getElementById("userInput").focus();
     removeTypingCursor(answerEl);
     answerEl.innerHTML = renderMarkdown(rawMarkdown);
-    removeImage();
+    // 更新复制按钮的 onclick，绑定最终文本
+    var copyBtn = document.querySelector("#" + assistantId + " .btn-copy");
+    if (copyBtn) {
+      copyBtn.onclick = function() { copyMessage(copyBtn, rawMarkdown); };
+    }
+    removeAllImages();
+    removeAllDocuments();
     loadSessions();
   });
 
@@ -935,21 +1632,32 @@ async function sendMessage() {
     document.getElementById("sendBtn").disabled = false;
     removeTypingCursor(answerEl);
     updateStep(thinkingBody, steps, "solver", "done");
+    updatePipelinePanel("solver", "done");
     if (rawMarkdown) {
       answerEl.innerHTML = renderMarkdown(rawMarkdown);
     } else {
-      answerEl.innerHTML = '<p style="color:var(--danger);">连接中断，请重试</p>';
+      // 尝试从 EventSource URL 推断错误原因
+      var hasDocInUrl = streamUrl.indexOf("document_filenames=") > -1 || streamUrl.indexOf("document_filename=") > -1;
+      var hint = "连接中断，请重试。";
+      if (!hasDocInUrl) {
+        hint += " 如果知识库未建库，请先在右侧「知识库管理」中上传文档，或在聊天框附加文件后再发送。";
+      }
+      answerEl.innerHTML = '<p style="color:var(--danger);">' + hint + '</p>';
     }
-    removeImage();
+    removeAllImages();
+    removeAllDocuments();
   });
 }
 
 // ── UI Helpers ──
 
-function addMessage(role, text) {
+function addMessage(role, text, withActions) {
   var container = document.getElementById("chatMessages");
   var wrapper = document.createElement("div");
   wrapper.className = "message-wrapper " + role;
+  if (withActions !== false) {
+    wrapper.setAttribute("role", "article");
+  }
   var bubble = document.createElement("div");
   bubble.className = "message-bubble";
   if (role === "assistant") {
@@ -958,6 +1666,23 @@ function addMessage(role, text) {
     bubble.textContent = text;
   }
   wrapper.appendChild(bubble);
+  // 添加时间戳
+  var timeDiv = document.createElement("div");
+  timeDiv.className = "msg-time";
+  timeDiv.textContent = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+  wrapper.appendChild(timeDiv);
+  // 助手消息加复制按钮
+  if (role === "assistant" && withActions !== false) {
+    var actions = document.createElement("div");
+    actions.className = "msg-actions";
+    var copyBtn = document.createElement("button");
+    copyBtn.className = "btn-copy";
+    copyBtn.textContent = "📋 复制";
+    copyBtn.setAttribute("aria-label", "复制回复");
+    copyBtn.onclick = function() { copyMessage(copyBtn, text); };
+    actions.appendChild(copyBtn);
+    wrapper.appendChild(actions);
+  }
   container.appendChild(wrapper);
   container.scrollTop = container.scrollHeight;
 }
@@ -967,7 +1692,8 @@ function addAssistantContainer(id) {
   var wrapper = document.createElement("div");
   wrapper.className = "message-wrapper assistant";
   wrapper.id = id;
-  wrapper.innerHTML = '<div class="thinking-card open"><div class="thinking-header" onclick="this.parentElement.classList.toggle(\'open\')">▼ 思考过程</div><div class="thinking-body"></div></div><div class="message-bubble answer-content"><span class="typing-cursor"></span></div>';
+  wrapper.setAttribute("role", "article");
+  wrapper.innerHTML = '<div class="thinking-card open"><div class="thinking-header" onclick="this.parentElement.classList.toggle(\'open\')" role="button" aria-expanded="true" tabindex="0" onkeydown="if(event.key===\'Enter\')this.parentElement.classList.toggle(\'open\')">▼ 思考过程</div><div class="thinking-body"></div></div><div class="message-bubble answer-content"><span class="typing-cursor"></span></div><div class="msg-actions"><button class="btn-copy" onclick="var a=this.parentElement.parentElement.querySelector(\'.answer-content\');copyMessage(this,a?a.textContent:\'\')" aria-label="复制回复">📋 复制</button><button class="btn-regenerate" onclick="regenerateMessage(\'' + id + '\')" aria-label="重新生成">🔄 重新生成</button></div>';
   container.appendChild(wrapper);
   container.scrollTop = container.scrollHeight;
   return wrapper;

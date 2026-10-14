@@ -1,6 +1,14 @@
-# 环境变量
+# 环境变量（核心：绝不能提交）
 .env
 .envrc
+.env.local
+.env.*.local
+
+# 密钥 / 证书文件
+*.key
+*.pem
+*.crt
+*.p12
 
 # Python
 __pycache__/
@@ -18,6 +26,11 @@ env/
 # 数据库 / 数据文件
 data/checkpoints.db*
 data/chroma_db/
+
+# 运行时产物
+data/uploads/
+data/reviews/
+data/metrics.json
 
 # IDE
 .vscode/

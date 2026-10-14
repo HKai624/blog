@@ -326,7 +326,7 @@ def build_email_body(
 
     lines.extend([
         "━" * 36,
-        "本邮件由 WorkMate Agent v2.0 自动生成 · DeepSeek 驱动",
+        "本邮件由 WorkMate Agent v1.0 自动生成 · DeepSeek 驱动",
         f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
     ])
 
@@ -371,14 +371,14 @@ def main():
         import schedule
         from datetime import timedelta
 
-        job = schedule.every().day.at("08:30").do(daily_job)
-        logging.info("定时器已启动，每天 08:30 执行...")
+        job = schedule.every().day.at("07:00").do(daily_job)
+        logging.info("定时器已启动，每天 07:00 执行...")
 
         now = datetime.now()
-        target = now.replace(hour=8, minute=30, second=0, microsecond=0)
+        target = now.replace(hour=7, minute=0, second=0, microsecond=0)
         if now > target:
             job.next_run = target + timedelta(days=1)
-            logging.info("已过 08:30，首次推送将在明天 08:30 执行")
+            logging.info("已过 07:00，首次推送将在明天 07:00 执行")
 
         while True:
             schedule.run_pending()
